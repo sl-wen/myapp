@@ -4,9 +4,17 @@ export class Cat {
         this.x = x;
         this.y = y;
         
+        // 成长系统
+        this.level = 1;           // 当前等级
+        this.exp = 0;             // 当前经验值
+        this.maxExp = 100;        // 升级所需经验值
+        this.growth = 'kitten';   // 成长阶段: kitten(幼猫), adult(成年), elder(老年)
+        this.growthTime = 0;      // 成长时间计数
+        this.skills = new Set();  // 已学习的技能
+        
         // 状态
-        this.happiness = 100;  // 幸福度
-        this.energy = 100;     // 能量
+        this.happiness = 100;     // 幸福度
+        this.energy = 100;        // 能量
         this.status = 'idle';  // 状态：idle, sleeping, walking, dragging, eating
         
         // 移动相关
@@ -196,49 +204,39 @@ export class Cat {
     }
     
     update() {
-        // 更新状态条显示时间
-        if (this.statusShowTime > 0) {
+        // 更新状态显示时间
+        if (this.showStatus && this.statusShowTime > 0) {
             this.statusShowTime--;
-            if (this.statusShowTime === 0) {
+            if (this.statusShowTime <= 0) {
                 this.showStatus = false;
             }
         }
-        
-        // 如果没有在拖拽，才进行自动移动
-        if (!this.isDragging) {
-            // 更新移动计时器
-            this.moveTimer++;
-            if (this.moveTimer >= 300) { // 5秒 = 300帧
-                this.moveTimer = 0;
-                
-                // 随机选择新状态
-                const rand = Math.random();
-                if (rand < 0.3) {
-                    this.status = 'sleeping';
-                } else {
-                    this.status = 'walking';
-                    this.findNewTarget();
-                }
+
+        // 消耗能量并增加经验
+        const energyConsumption = 0.000046;  // 每6分钟消耗1点能量
+        if (this.energy > 0) {
+            this.energy = Math.max(0, Math.min(100, this.energy - energyConsumption));
+            // 每消耗1点能量增加2点经验
+            const expGain = energyConsumption * 2;
+            this.gainExp(expGain);
+        }
+
+        // 更新目标位置
+        if (this.energy > 0) {
+            if (!this.targetX || !this.targetY || 
+                (Math.abs(this.x - this.targetX) < 1 && Math.abs(this.y - this.targetY) < 1)) {
+                this.findNewTarget();
             }
+
+            // 移动向目标位置
+            const dx = this.targetX - this.x;
+            const dy = this.targetY - this.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // 更新状态
-            this.energy = Math.max(0, Math.min(100, this.energy - 0.005));
-            this.happiness = Math.max(0, Math.min(100, this.happiness - 0.01));
-            
-            // 更新位置
-            if (this.status === 'walking') {
-                const dx = this.targetX - this.x;
-                const dy = this.targetY - this.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance > this.speed) {
-                    this.x += (dx / distance) * this.speed;
-                    this.y += (dy / distance) * this.speed;
-                    this.direction = dx > 0 ? 1 : -1;
-                } else {
-                    this.x = this.targetX;
-                    this.y = this.targetY;
-                }
+            if (distance > 1) {
+                const speed = 0.5 + (this.energy / 100) * 1.5;  // 根据能量调整速度
+                this.x += (dx / distance) * speed;
+                this.y += (dy / distance) * speed;
             }
         }
     }
@@ -298,70 +296,153 @@ export class Cat {
         
         // 只在显示状态为true时绘制状态条
         if (this.showStatus) {
-            this.renderStatusBars(ctx);
+            this.renderStatus(ctx);
+        }
+        
+        // 在猫咪上方显示等级
+        if (this.showStatus) {
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#5C4033';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Lv.${this.level}`, this.x, this.y - 80);
+            
+            // 显示经验值进度条
+            const expBarWidth = 60;
+            const expBarHeight = 4;
+            const expBarX = this.x - expBarWidth/2;
+            const expBarY = this.y - 75;
+            
+            // 经验条背景
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(expBarX, expBarY, expBarWidth, expBarHeight);
+            
+            // 经验条进度
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(expBarX, expBarY, expBarWidth * (this.exp / this.maxExp), expBarHeight);
         }
     }
     
-    renderStatusBars(ctx) {
-        const barWidth = 80;
-        const barHeight = 6;
-        const padding = 5;
-        const offsetY = this.processedImageRight ? this.processedImageRight.height / 2 + 10 : 70;
+    renderStatus(ctx) {
+        if (!this.showStatus) return;
         
-        // 绘制状态条背景
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';  // 半透明黑色背景
-        ctx.fillRect(
-            this.x - barWidth/2 - 2,
-            this.y + offsetY - 2,
-            barWidth + 4,
-            (barHeight * 2 + padding) + 4
-        );
+        const barWidth = 100;
+        const barHeight = 15;
+        const margin = 5;
+        const cornerRadius = 7;
+        
+        // 计算状态条位置
+        const energyY = this.y - 60;
+        const happinessY = this.y - 40;
+        const x = this.x - barWidth/2;
         
         // 绘制能量条
-        ctx.fillStyle = '#333333';
-        ctx.fillRect(this.x - barWidth/2, this.y + offsetY, barWidth, barHeight);
-        
-        ctx.fillStyle = '#44ff44';
-        ctx.fillRect(
-            this.x - barWidth/2,
-            this.y + offsetY,
-            barWidth * (this.energy/100),
-            barHeight
-        );
+        this.renderStatusBar(ctx, x, energyY, barWidth, barHeight, cornerRadius, 
+            this.energy, 100, '#FFE4B5', '#FFA500', '能量');
         
         // 绘制幸福度条
-        ctx.fillStyle = '#333333';
-        ctx.fillRect(
-            this.x - barWidth/2,
-            this.y + offsetY + padding + barHeight,
-            barWidth,
-            barHeight
-        );
+        this.renderStatusBar(ctx, x, happinessY, barWidth, barHeight, cornerRadius, 
+            this.happiness, 100, '#FFB6C1', '#FF69B4', '幸福');
+    }
+    
+    renderStatusBar(ctx, x, y, width, height, radius, value, maxValue, bgColor, fillColor, label) {
+        // 绘制背景
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.lineWidth = 1;
         
-        ctx.fillStyle = '#ff4444';
-        ctx.fillRect(
-            this.x - barWidth/2,
-            this.y + offsetY + padding + barHeight,
-            barWidth * (this.happiness/100),
-            barHeight
-        );
+        // 绘制圆角矩形背景
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.arcTo(x + width, y, x + width, y + radius, radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+        ctx.lineTo(x + radius, y + height);
+        ctx.arcTo(x, y + height, x, y + height - radius, radius);
+        ctx.lineTo(x, y + radius);
+        ctx.arcTo(x, y, x + radius, y, radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // 计算填充宽度
+        const fillWidth = (width - 4) * (value / maxValue);
+        
+        // 绘制填充部分
+        if (fillWidth > 0) {
+            ctx.fillStyle = fillColor;
+            ctx.beginPath();
+            const innerRadius = Math.max(1, radius - 2);
+            ctx.moveTo(x + 2 + innerRadius, y + 2);
+            if (fillWidth >= width - 4) {
+                // 如果填充满了，使用完整的圆角
+                ctx.lineTo(x + fillWidth + 2 - innerRadius, y + 2);
+                ctx.arcTo(x + fillWidth + 2, y + 2, x + fillWidth + 2, y + 2 + innerRadius, innerRadius);
+                ctx.lineTo(x + fillWidth + 2, y + height - 2 - innerRadius);
+                ctx.arcTo(x + fillWidth + 2, y + height - 2, x + fillWidth + 2 - innerRadius, y + height - 2, innerRadius);
+            } else {
+                // 如果没填充满，右边直角
+                ctx.lineTo(x + fillWidth + 2, y + 2);
+                ctx.lineTo(x + fillWidth + 2, y + height - 2);
+            }
+            ctx.lineTo(x + 2 + innerRadius, y + height - 2);
+            ctx.arcTo(x + 2, y + height - 2, x + 2, y + height - 2 - innerRadius, innerRadius);
+            ctx.lineTo(x + 2, y + 2 + innerRadius);
+            ctx.arcTo(x + 2, y + 2, x + 2 + innerRadius, y + 2, innerRadius);
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        // 绘制文本
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#5C4033';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${label}: ${Math.floor(value)}/${maxValue}`, x + width/2, y + height/2);
     }
     
     feed() {
-        // 检查金币是否足够
-        if (this.scene.coins >= 100) {
-            this.scene.coins -= 100; // 扣除金币
-            this.energy = Math.min(100, this.energy + 20);
-            this.status = 'eating';
-            this.actionFrame = 0;
-            this.showStatus = true;
-            this.statusShowTime = 120;
-            console.log('猫咪被喂食，能量:', this.energy);
-            return true;
-        } else {
-            console.log('金币不足，无法购买猫粮');
+        // 显示背包中的食物道具
+        const foodItems = this.scene.inventory.getItemsByType('food');
+        if (foodItems.length === 0) {
+            wx.showToast({
+                title: '没有食物道具',
+                icon: 'none'
+            });
             return false;
         }
+
+        // 显示食物选择界面
+        wx.showActionSheet({
+            itemList: foodItems.map(item => `${item.name} (${item.quantity}个)`),
+            success: (res) => {
+                const selectedItem = foodItems[res.tapIndex];
+                if (selectedItem && selectedItem.quantity > 0) {
+                    // 使用道具
+                    if (this.scene.inventory.useItem(selectedItem.id)) {
+                        // 增加能量和幸福度
+                        this.energy = Math.min(100, this.energy + selectedItem.energyValue);
+                        this.happiness = Math.min(100, this.happiness + selectedItem.happinessValue);
+                        // 显示使用效果
+                        this.status = 'eating';
+                        this.actionFrame = 0;
+                        this.showStatus = true;
+                        this.statusShowTime = 120;
+                        // 播放音效或显示提示
+                        wx.showToast({
+                            title: `使用了${selectedItem.name}`,
+                            icon: 'success'
+                        });
+                        // 保存数据
+                        this.scene.saveUserData();
+                        return true;
+                    }
+                }
+            },
+            fail: () => {
+                return false;
+            }
+        });
     }
     
     pet() {
@@ -369,5 +450,79 @@ export class Cat {
         this.showStatus = true;
         this.statusShowTime = 120;
         console.log('猫咪被抚摸，幸福度:', this.happiness);
+    }
+    
+    // 获得经验值
+    gainExp(amount) {
+        this.exp += amount;
+        // 检查是否升级
+        while (this.exp >= this.maxExp) {
+            this.exp -= this.maxExp;
+            this.level++;
+            this.maxExp = Math.floor(this.maxExp * 1.2);  // 每级所需经验增加20%
+            this.showLevelUpEffect();
+        }
+        
+        // 保存数据
+        this.scene.saveUserData();
+    }
+    
+    // 升级
+    levelUp() {
+        this.level++;
+        this.exp -= this.maxExp;
+        this.maxExp = Math.floor(this.maxExp * 1.5);  // 提高下一级所需经验
+        
+        // 检查是否达到成长阶段
+        if (this.level >= 20 && this.growth === 'kitten') {
+            this.growth = 'adult';
+            this.updateGrowthEffects();
+        } else if (this.level >= 50 && this.growth === 'adult') {
+            this.growth = 'elder';
+            this.updateGrowthEffects();
+        }
+        
+        // 显示升级效果
+        this.showLevelUpEffect();
+        
+        // 保存数据
+        this.scene.saveUserData();
+    }
+    
+    // 更新成长阶段效果
+    updateGrowthEffects() {
+        switch (this.growth) {
+            case 'kitten':
+                this.speed = 4;        // 幼猫移动较快
+                this.touchArea = { width: 80, height: 80 };  // 触摸区域较小
+                break;
+            case 'adult':
+                this.speed = 3;        // 成年猫移动速度适中
+                this.touchArea = { width: 100, height: 100 };
+                // 解锁新技能
+                this.skills.add('jump');
+                this.skills.add('roll');
+                break;
+            case 'elder':
+                this.speed = 2;        // 老年猫移动较慢
+                this.touchArea = { width: 120, height: 120 };  // 触摸区域较大
+                // 解锁特殊技能
+                this.skills.add('wisdom');
+                break;
+        }
+    }
+    
+    // 显示升级特效
+    showLevelUpEffect() {
+        this.status = 'levelup';
+        this.showStatus = true;
+        this.statusShowTime = 120;  // 显示2秒
+        
+        // 播放升级音效或显示升级提示
+        wx.showToast({
+            title: `升级到 ${this.level} 级!`,
+            icon: 'success',
+            duration: 2000
+        });
     }
 } 
