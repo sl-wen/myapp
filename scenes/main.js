@@ -355,7 +355,7 @@ export class MainScene {
                     this.cat.stopDragging();
                 }
             } catch (error) {
-                console.error('触摸��消事件处理失败:', error);
+                console.error('触摸取消事件处理失败:', error);
             }
         });
     }
@@ -490,13 +490,10 @@ export class MainScene {
     
     openShop() {
         try {
-            console.log('开始加载小卖部商品');
             // 获取所有可购买的食物道具
             const items = Object.values(ITEMS).filter(item => 
                 item.type === ItemType.FOOD && item.cost
             );
-            
-            console.log('可购买商品:', items);
             
             if (items.length === 0) {
                 wx.showToast({
@@ -507,35 +504,43 @@ export class MainScene {
                 return;
             }
             
-            // 创建商品列表，使用图标显示属性
+            // 显示商品列表，使用图标显示属性
             const itemList = items.map(item => 
                 `${item.name} - 💰${item.cost} 🍖${item.satietyValue} 💝${item.happinessValue} ⭐${item.expValue}`
             );
             
-            console.log('商品列表:', itemList);
-            
-            // 显示商品列表
+            // 先选择商品
             wx.showActionSheet({
                 itemList: itemList,
                 success: (res) => {
                     const selectedItem = items[res.tapIndex];
-                    console.log('选择商品:', selectedItem);
                     
-                    // 显示商品详情和购买选项
-                    wx.showModal({
-                        title: selectedItem.name,
-                        content: `${selectedItem.description}\n\n` +
-                                `💰 价格：${selectedItem.cost}金币\n\n` +
-                                `🍖 饱食度 +${selectedItem.satietyValue}\n` +
-                                `💝 幸福度 +${selectedItem.happinessValue}\n` +
-                                `⭐ 经验 +${selectedItem.expValue}`,
-                        showCancel: true,
-                        cancelText: '关闭',
-                        confirmText: '购买',
-                        success: (result) => {
-                            if (result.confirm) {
-                                this.purchaseItem(selectedItem);
-                            }
+                    // 再选择数量
+                    const quantityList = ['1个', '5个', '10个', '20个', '50个', '99个'];
+                    wx.showActionSheet({
+                        itemList: quantityList,
+                        success: (qRes) => {
+                            const quantities = [1, 5, 10, 20, 50, 99];
+                            const quantity = quantities[qRes.tapIndex];
+                            
+                            // 显示确认购买对话框
+                            wx.showModal({
+                                title: selectedItem.name,
+                                content: `确认购买 ${quantity} 个？\n\n` +
+                                        `单价：${selectedItem.cost}金币\n` +
+                                        `总价：${selectedItem.cost * quantity}金币\n\n` +
+                                        `效果预览：\n` +
+                                        `🍖 饱食度 +${selectedItem.satietyValue * quantity}\n` +
+                                        `💝 幸福度 +${selectedItem.happinessValue * quantity}\n` +
+                                        `⭐ 经验 +${selectedItem.expValue * quantity}`,
+                                cancelText: '取消',
+                                confirmText: '购买',
+                                success: (result) => {
+                                    if (result.confirm) {
+                                        this.purchaseItem(selectedItem, quantity);
+                                    }
+                                }
+                            });
                         }
                     });
                 }
@@ -550,7 +555,9 @@ export class MainScene {
         }
     }
     
-    purchaseItem(item) {
+    purchaseItem(item, quantity = 1) {
+        const totalCost = item.cost * quantity;
+        
         if (!item || !item.cost) {
             wx.showToast({
                 title: '商品无效',
@@ -560,7 +567,7 @@ export class MainScene {
             return;
         }
         
-        if (this.coins < item.cost) {
+        if (this.coins < totalCost) {
             wx.showToast({
                 title: '金币不足',
                 icon: 'error',
@@ -570,19 +577,21 @@ export class MainScene {
         }
         
         // 扣除金币并添加物品到背包
-        this.coins -= item.cost;
-        if (this.inventory.addItem(item.id, 1)) {
-            wx.showToast({
+        this.coins -= totalCost;
+        if (this.inventory.addItem(item.id, quantity)) {
+            wx.showModal({
                 title: '购买成功',
-                icon: 'success',
-                duration: 2000
+                content: `${item.name} x${quantity}\n` +
+                        `消耗金币：${totalCost}\n` +
+                        `剩余金币：${this.coins}`,
+                showCancel: false
             });
             
             // 保存数据
             this.saveUserData();
         } else {
             // 如果添加物品失败，退还金币
-            this.coins += item.cost;
+            this.coins += totalCost;
             wx.showToast({
                 title: '背包已满',
                 icon: 'error',
@@ -970,21 +979,32 @@ export class MainScene {
                 success: (res) => {
                     const selectedItem = items[res.tapIndex];
                     
-                    // 显示物品详情和使用选项
-                    wx.showModal({
-                        title: selectedItem.name,
-                        content: `${selectedItem.description}\n\n` +
-                                `📦 数量：${selectedItem.quantity}\n\n` +
-                                `🍖 饱食度 +${selectedItem.satietyValue}\n` +
-                                `💝 幸福度 +${selectedItem.happinessValue}\n` +
-                                `⭐ 经验 +${selectedItem.expValue}`,
-                        showCancel: true,
-                        cancelText: '关闭',
-                        confirmText: '使用',
-                        success: (result) => {
-                            if (result.confirm) {
-                                this.useItem(selectedItem);
-                            }
+                    // 选择使用数量
+                    const maxQuantity = Math.min(selectedItem.quantity, 99);
+                    const quantities = [1, 5, 10, 20, 50, 99].filter(q => q <= maxQuantity);
+                    const quantityList = quantities.map(q => `${q}个`);
+                    
+                    wx.showActionSheet({
+                        itemList: quantityList,
+                        success: (qRes) => {
+                            const quantity = quantities[qRes.tapIndex];
+                            
+                            // 显示确认使用对话框
+                            wx.showModal({
+                                title: selectedItem.name,
+                                content: `确认使用 ${quantity} 个？\n\n` +
+                                        `效果预览：\n` +
+                                        `🍖 饱食度 +${selectedItem.satietyValue * quantity}\n` +
+                                        `💝 幸福度 +${selectedItem.happinessValue * quantity}\n` +
+                                        `⭐ 经验 +${selectedItem.expValue * quantity}`,
+                                cancelText: '取消',
+                                confirmText: '使用',
+                                success: (result) => {
+                                    if (result.confirm) {
+                                        this.useItem(selectedItem, quantity);
+                                    }
+                                }
+                            });
                         }
                     });
                 }
@@ -999,8 +1019,8 @@ export class MainScene {
         }
     }
 
-    useItem(item) {
-        if (!item || item.quantity <= 0) {
+    useItem(item, quantity = 1) {
+        if (!item || item.quantity < quantity) {
             wx.showToast({
                 title: '物品数量不足',
                 icon: 'error',
@@ -1010,20 +1030,24 @@ export class MainScene {
         }
 
         // 使用物品并应用效果
-        if (this.inventory.useItem(item.id)) {
+        if (this.inventory.removeItem(item.id, quantity)) {
             // 增加饱食度
+            const oldSatiety = this.cat.satiety;
             if (item.satietyValue) {
-                this.cat.satiety = Math.min(100, this.cat.satiety + item.satietyValue);
+                this.cat.satiety = Math.min(100, this.cat.satiety + item.satietyValue * quantity);
             }
             
             // 增加幸福度
+            const oldHappiness = this.cat.happiness;
             if (item.happinessValue) {
-                this.cat.happiness = Math.min(100, this.cat.happiness + item.happinessValue);
+                this.cat.happiness = Math.min(100, this.cat.happiness + item.happinessValue * quantity);
             }
             
             // 增加经验
+            const oldExp = this.cat.exp;
+            const oldLevel = this.cat.level;
             if (item.expValue) {
-                this.cat.exp += item.expValue;
+                this.cat.exp += item.expValue * quantity;
                 // 检查是否升级
                 while (this.cat.exp >= this.cat.maxExp) {
                     this.cat.exp -= this.cat.maxExp;
@@ -1040,10 +1064,24 @@ export class MainScene {
             this.saveUserData();
             
             // 显示使用效果
-            wx.showToast({
-                title: `使用了${item.name}`,
-                icon: 'success',
-                duration: 2000
+            let resultText = `使用：${item.name} x${quantity}\n\n`;
+            if (item.satietyValue) {
+                resultText += `饱食度：${oldSatiety} → ${this.cat.satiety}\n`;
+            }
+            if (item.happinessValue) {
+                resultText += `幸福度：${oldHappiness} → ${this.cat.happiness}\n`;
+            }
+            if (item.expValue) {
+                if (this.cat.level > oldLevel) {
+                    resultText += `等级：${oldLevel} → ${this.cat.level}\n`;
+                }
+                resultText += `经验值：${oldExp} → ${this.cat.exp}/${this.cat.maxExp}`;
+            }
+            
+            wx.showModal({
+                title: '使用成功',
+                content: resultText,
+                showCancel: false
             });
         }
     }
