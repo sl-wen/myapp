@@ -188,36 +188,60 @@ export class Cat {
     
     // 初始化技能
     initSkills() {
+        // 随机生成50-100之间的总属性点数
+        let remainingPoints = Math.floor(Math.random() * 51) + 50;  // 50到100之间的随机数
+        let remainingAttributes = ['stamina', 'charm', 'strength', 'fortune'];
+        let attributeValues = {};
+
+        while (remainingAttributes.length > 0) {
+            // 最后一个属性直接分配剩余点数
+            if (remainingAttributes.length === 1) {
+                attributeValues[remainingAttributes[0]] = remainingPoints;
+                break;
+            }
+
+            // 为当前属性随机分配点数，保证剩余属性每个至少有5点
+            const minPointsForRest = remainingAttributes.length * 5;  // 每个属性至少5点
+            const maxPoints = remainingPoints - minPointsForRest;
+            const points = Math.floor(Math.random() * (maxPoints - 5 + 1)) + 5;  // 至少5点
+
+            const attribute = remainingAttributes.splice(
+                Math.floor(Math.random() * remainingAttributes.length), 1
+            )[0];
+
+            attributeValues[attribute] = points;
+            remainingPoints -= points;
+        }
+
+        // 创建技能对象
         return {
-            hunting: {
-                level: Math.floor(Math.random() * 10) + 1,     // 捕猎等级
-                exp: 0,                                        // 技能经验
-                maxExp: 100,                                   // 升级所需经验
-                talent: Math.floor(Math.random() * 100)        // 天赋值（影响成长速度）
-            },
-            agility: {
-                level: Math.floor(Math.random() * 10) + 1,     // 敏捷等级
-                exp: 0,
-                maxExp: 100,
-                talent: Math.floor(Math.random() * 100)
+            stamina: {
+                level: attributeValues.stamina,     // 体力等级
+                exp: 0,                            // 技能经验
+                maxExp: 100,                       // 升级所需经验
+                talent: Math.floor(Math.random() * 100),  // 天赋值（影响成长速度）
+                description: '体力影响猫咪的饱食度上限'
             },
             charm: {
-                level: Math.floor(Math.random() * 10) + 1,     // 魅力等级
+                level: attributeValues.charm,      // 魅力等级
                 exp: 0,
                 maxExp: 100,
-                talent: Math.floor(Math.random() * 100)
+                talent: Math.floor(Math.random() * 100),
+                description: '魅力影响猫咪的幸福度上限'
             },
-            intelligence: {
-                level: Math.floor(Math.random() * 10) + 1,     // 智力等级
+            strength: {
+                level: attributeValues.strength,   // 力量等级
                 exp: 0,
                 maxExp: 100,
-                talent: Math.floor(Math.random() * 100)
+                talent: Math.floor(Math.random() * 100),
+                description: '力量影响猫咪的攻击能力'
             },
-            social: {
-                level: Math.floor(Math.random() * 10) + 1,     // 社交等级
+            fortune: {
+                level: attributeValues.fortune,    // 招财等级
                 exp: 0,
                 maxExp: 100,
-                talent: Math.floor(Math.random() * 100)
+                talent: Math.floor(Math.random() * 100),
+                description: '招财影响金币的产出效率'
             }
         };
     }
@@ -371,20 +395,22 @@ export class Cat {
                 ctx.restore();
                 return;
             }
-
-            // 先绘制猫咪名字（不受猫咪动画影响）
-            ctx.save();
-            ctx.font = 'bold 16px Arial';
-            ctx.fillStyle = '#333';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
-            // 添加文字阴影效果
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-            ctx.shadowBlur = 4;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
-            ctx.fillText(this.name, this.x, this.y - this.height/2 - 10);
-            ctx.restore();
+            
+            // 只在显示状态时绘制名字
+            if (this.showStatus) {
+                ctx.save();
+                ctx.font = 'bold 16px Arial';
+                ctx.fillStyle = '#333';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                // 添加文字阴影效果
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                ctx.fillText(this.name, this.x, this.y - this.height/2 - 10);
+                ctx.restore();
+            }
             
             // 获取当前状态的图片
             let currentImage = this.images[this.status];
@@ -468,17 +494,23 @@ export class Cat {
                y >= this.y - halfHeight && y <= this.y + halfHeight;
     }
 
-    startDragging(touchX, touchY) {
+    startDragging(x, y) {
         this.isDragging = true;
-        this.dragStartX = touchX;
-        this.dragStartY = touchY;
-        this.dragOffsetX = touchX - this.x;
-        this.dragOffsetY = touchY - this.y;
+        this.dragStartX = x;
+        this.dragStartY = y;
+        this.dragOffsetX = x - this.x;
+        this.dragOffsetY = y - this.y;
         this.lastDragTime = Date.now();
+        this.dragSpeed = 0;
         
-        // 显示状态并记录开始时间
-        this.showStatus = true;
-        this.statusShowStartTime = Date.now();
+        // 增加幸福度
+        this.happiness = Math.min(100, this.happiness + 2);
+        
+        // 更新抚摸任务进度
+        this.scene.taskManager.updateTask('daily_petting');
+        
+        // 保存数据
+        this.scene.saveUserData();
     }
 
     updateDragging(touchX, touchY) {
@@ -767,22 +799,23 @@ export class Cat {
 
     // 技能升级效果
     onSkillLevelUp(skillName, newLevel) {
-        // 根据不同技能给予不同奖励
+        // 根据不同属性给予不同奖励
         switch (skillName) {
-            case 'hunting':
-                // 提升饱食度恢复效率
-                break;
-            case 'agility':
-                // 提升移动速度
+            case 'stamina':
+                // 立即恢复一定饱食度
+                this.satiety = Math.min(this.getMaxSatiety(), this.satiety + 20);
                 break;
             case 'charm':
-                // 提升幸福度获得
+                // 立即恢复一定幸福度
+                this.happiness = Math.min(this.getMaxHappiness(), this.happiness + 20);
                 break;
-            case 'intelligence':
-                // 提升经验获得
+            case 'strength':
+                // 立即恢复一定能量
+                this.energy = Math.min(100, this.energy + 20);
                 break;
-            case 'social':
-                // 提升互动效果
+            case 'fortune':
+                // 立即获得一些金币
+                this.scene.coins += newLevel * 10;
                 break;
         }
     }
@@ -790,11 +823,10 @@ export class Cat {
     // 获取技能描述
     getSkillDescription(skillName) {
         const descriptions = {
-            hunting: '捕猎能力影响食物获得效率',
-            agility: '敏捷度影响移动速度和反应能力',
-            charm: '魅力值影响互动时的幸福度获得',
-            intelligence: '智力值影响经验获得和学习速度',
-            social: '社交能力影响与其他猫咪的互动效果'
+            stamina: `体力 - 提升饱食度上限\n当前饱食度上限：${this.getMaxSatiety()}`,
+            charm: `魅力 - 提升幸福度上限\n当前幸福度上限：${this.getMaxHappiness()}`,
+            strength: `力量 - 提升攻击能力\n当前攻击力：${this.getAttackPower()}`,
+            fortune: `招财 - 提升金币产出\n当前金币加成：${Math.floor((this.getCoinBonus() - 1) * 100)}%`
         };
         return descriptions[skillName] || '';
     }
@@ -802,30 +834,25 @@ export class Cat {
     // 获取技能培养建议
     getSkillTrainingTips(skillName) {
         const tips = {
-            hunting: [
-                '使用逗猫棒训练捕捉能力',
-                '尝试捕捉小玩具',
-                '进行追逐游戏'
-            ],
-            agility: [
-                '设置障碍训练',
-                '玩跳跃游戏',
-                '进行敏捷性训练'
+            stamina: [
+                '进行体能训练',
+                '外出散步',
+                '玩耍运动'
             ],
             charm: [
                 '梳理毛发',
-                '学习新的卖萌动作',
-                '保持整洁的外表'
+                '学习卖萌',
+                '保持整洁'
             ],
-            intelligence: [
-                '使用益智玩具',
-                '解决简单的谜题',
-                '学习新的指令'
+            strength: [
+                '力量训练',
+                '搏击训练',
+                '障碍训练'
             ],
-            social: [
-                '与其他猫咪互动',
-                '参加群体活动',
-                '学习社交礼仪'
+            fortune: [
+                '学习捕猎',
+                '寻找宝物',
+                '招财修炼'
             ]
         };
         return tips[skillName] || [];
@@ -859,5 +886,22 @@ export class Cat {
             description: this.getSkillDescription(skillName),
             trainingTips: this.getSkillTrainingTips(skillName)
         };
+    }
+
+    // 获取属性加成后的上限值
+    getMaxSatiety() {
+        return 100 + this.skills.stamina.level * 5;  // 每级体力增加5点饱食度上限
+    }
+
+    getMaxHappiness() {
+        return 100 + this.skills.charm.level * 5;    // 每级魅力增加5点幸福度上限
+    }
+
+    getAttackPower() {
+        return 10 + this.skills.strength.level * 2;  // 每级力量增加2点攻击力
+    }
+
+    getCoinBonus() {
+        return 1 + this.skills.fortune.level * 0.1;  // 每级招财增加10%金币产出
     }
 } 

@@ -6,9 +6,9 @@ export class Inventory {
         this.capacity = 100;
         
         // 初始化背包，添加一些默认道具
-        this.addItem('food_1', 5);  // 小鱼干
-        this.addItem('food_2', 2);  // 猫粮
-        this.addItem('food_3', 1);  // 高级猫粮
+        this.addItem('fish', 5);         // 小鱼干
+        this.addItem('cat_food', 2);     // 普通猫粮
+        this.addItem('premium_cat_food', 1);  // 高级猫粮
     }
     
     addItem(itemId, quantity = 1) {
