@@ -27,14 +27,14 @@ export class MainScene {
         
         // 添加签到相关属性
         this.signInDays = 0;      // 连续签到天数
-        this.lastSignInDate = null;  // 上次签到日期
+        this.lastSignInDate = null;  // 上次签到日期（UTC时
         this.hasSignedToday = false; // 今日是否已签到
         
         // 初始化按钮
         const buttonSize = Math.min(this.canvas.width, this.canvas.height) * 0.12;
         const margin = buttonSize * 0.2;
         const bottomY = this.canvas.height - buttonSize * 2;  // 将按钮位置往上移动一个按钮高度
-        const totalButtons = 6; // 总按钮数
+        const totalButtons = 5; // 总按钮数（减少一个）
         const totalWidth = buttonSize * totalButtons + margin * (totalButtons - 1);
         const startX = (this.canvas.width - totalWidth) / 2;
         
@@ -60,7 +60,7 @@ export class MainScene {
                 y: bottomY,
                 width: buttonSize,
                 height: buttonSize,
-                text: '商城',
+                text: '小卖部',
                 icon: '🏪'
             },
             bag: {
@@ -71,16 +71,8 @@ export class MainScene {
                 text: '背包',
                 icon: '🎒'
             },
-            feed: {
-                x: startX + (buttonSize + margin) * 4,
-                y: bottomY,
-                width: buttonSize,
-                height: buttonSize,
-                text: '喂食',
-                icon: '🍖'
-            },
             activity: {
-                x: startX + (buttonSize + margin) * 5,
+                x: startX + (buttonSize + margin) * 4,
                 y: bottomY,
                 width: buttonSize,
                 height: buttonSize,
@@ -108,12 +100,11 @@ export class MainScene {
     async init() {
         console.log('初始化主场景...');
         try {
-            // 设置为已登录状态
+            // 设置为已登录态
             this.isLoggedIn = true;
             
             // 使用默认数据，增加初始金币
             this.coins = 1000;  // 修改初始金币为1000
-            this.catFood = 5;
             this.signInDays = 0;
             this.lastSignInDate = null;
             this.hasSignedToday = false;
@@ -289,17 +280,12 @@ export class MainScene {
     
     // 定期同步数据到服务器
     startAutoSync() {
-        this.syncInterval = setInterval(async () => {
-            if (this.isLoggedIn) {
-                await this.saveUserData();
-            }
-        }, 60000); // 每分钟同步一次
+        // 移除自动同步
+        console.log('数据同步已禁用，仅在用户操作后保存');
     }
     
     stopAutoSync() {
-        if (this.syncInterval) {
-            clearInterval(this.syncInterval);
-        }
+        // 空方法，保持接口兼容
     }
     
     initTouchEvents() {
@@ -322,6 +308,13 @@ export class MainScene {
                     }
                 }
                 
+                // 检查是否点击了猫咪
+                if (this.cat && this.cat.checkTouched(touchX, touchY)) {
+                    // 开始拖拽
+                    this.cat.startDragging(touchX, touchY);
+                    return;
+                }
+                
                 // 检查按钮点击
                 for (const [key, button] of Object.entries(this.buttons)) {
                     if (this.checkButtonTouched(touchX, touchY, button)) {
@@ -329,16 +322,40 @@ export class MainScene {
                         return;
                     }
                 }
-                
-                // 检查是否点击了猫咪
-                if (this.cat && this.cat.checkTouched(touchX, touchY)) {
-                    // 随机奖励金币
-                    const coins = Math.floor(Math.random() * 5) + 1;
-                    this.addCoins(coins);
-                    this.cat.pet();
-                }
             } catch (error) {
                 console.error('触摸事件处理失败:', error);
+            }
+        });
+
+        this.canvas.addEventListener('touchmove', (e) => {
+            try {
+                if (this.cat && this.cat.isDragging) {
+                    const touch = e.touches[0];
+                    this.cat.updateDragging(touch.clientX, touch.clientY);
+                    e.preventDefault(); // 防止页面滚动
+                }
+            } catch (error) {
+                console.error('触摸移动事件处理失败:', error);
+            }
+        });
+
+        this.canvas.addEventListener('touchend', () => {
+            try {
+                if (this.cat && this.cat.isDragging) {
+                    this.cat.stopDragging();
+                }
+            } catch (error) {
+                console.error('触摸结束事件处理失败:', error);
+            }
+        });
+
+        this.canvas.addEventListener('touchcancel', () => {
+            try {
+                if (this.cat && this.cat.isDragging) {
+                    this.cat.stopDragging();
+                }
+            } catch (error) {
+                console.error('触摸��消事件处理失败:', error);
             }
         });
     }
@@ -357,6 +374,7 @@ export class MainScene {
     
     handleButtonClick(buttonKey) {
         try {
+            console.log('点击按钮:', buttonKey); // 添加调试日志
             switch (buttonKey) {
                 case 'signIn':
                     this.handleSignIn();
@@ -365,13 +383,11 @@ export class MainScene {
                     this.handleCollect();
                     break;
                 case 'shop':
+                    console.log('打开小卖部'); // 添加调试日志
                     this.openShop();
                     break;
                 case 'bag':
                     this.openBag();
-                    break;
-                case 'feed':
-                    this.feedCat();
                     break;
                 case 'activity':
                     this.openActivity();
@@ -379,6 +395,8 @@ export class MainScene {
                 case 'task':
                     this.openTaskPanel();
                     break;
+                default:
+                    console.warn('未知的按钮:', buttonKey);
             }
         } catch (error) {
             console.error('按钮点击处理失败:', error);
@@ -392,7 +410,7 @@ export class MainScene {
     
     handleSignIn() {
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        today.setUTCHours(0, 0, 0, 0);
         
         if (this.hasSignedToday) {
             wx.showToast({
@@ -406,12 +424,12 @@ export class MainScene {
         // 检查是否连续签到
         if (this.lastSignInDate) {
             const lastDate = new Date(this.lastSignInDate);
-            lastDate.setHours(0, 0, 0, 0);
+            lastDate.setUTCHours(0, 0, 0, 0);
             const timeDiff = today.getTime() - lastDate.getTime();
             const dayDiff = timeDiff / (1000 * 3600 * 24);
             
             if (dayDiff > 1) {
-                // 签到中断，置数
+                // 签到中断，重置连续签到天数
                 this.signInDays = 0;
             }
         }
@@ -427,27 +445,28 @@ export class MainScene {
         this.hasSignedToday = true;
         this.coins += reward;
         
-        // 保存数据
+        // 保存数据（只在签到成功后）
         this.saveUserData();
         
         // 显示奖励信息
         wx.showModal({
             title: '签到成功',
-            content: `连续签��${this.signInDays}天\n获得${reward}金币`,
+            content: `连续签到${this.signInDays}天\n获得${reward}金币`,
             showCancel: false
         });
     }
     
     handleCollect() {
         if (this.pendingCoins > 0) {
+            const collectedAmount = this.pendingCoins; // 保存待领取的金币数
             this.coins += this.pendingCoins;
             this.pendingCoins = 0;
             
-            // 保存数据
+            // 保存数据（只在实际领取金币时）
             this.saveUserData();
             
             wx.showToast({
-                title: `领取${this.pendingCoins}金币`,
+                title: `领取${collectedAmount}金币`,
                 icon: 'success',
                 duration: 2000
             });
@@ -464,35 +483,71 @@ export class MainScene {
         // 暂时使用提示框代替页面跳转
         wx.showModal({
             title: '小游戏',
-            content: '小游戏正在开发中，敬请期待！',
+            content: '小游戏在开发中，敬请期待！',
             showCancel: false
         });
     }
     
     openShop() {
-        this.shopData.isOpen = true;
-        
-        // 获取所有商品（食物和经验道具）
-        const items = Object.values(ITEMS).filter(item => 
-            item.type === ItemType.FOOD || item.type === ItemType.EXP
-        );
-        
-        // 创建商品列表
-        const itemList = items.map(item => ({
-            text: `${item.name} (${item.cost}金币) - ${item.description}`,
-            value: item.id
-        }));
-        
-        wx.showActionSheet({
-            itemList: itemList.map(item => item.text),
-            success: (res) => {
-                const selectedItem = ITEMS[itemList[res.tapIndex].value];
-                this.purchaseItem(selectedItem);
-            },
-            complete: () => {
-                this.shopData.isOpen = false;
+        try {
+            console.log('开始加载小卖部商品');
+            // 获取所有可购买的食物道具
+            const items = Object.values(ITEMS).filter(item => 
+                item.type === ItemType.FOOD && item.cost
+            );
+            
+            console.log('可购买商品:', items);
+            
+            if (items.length === 0) {
+                wx.showToast({
+                    title: '暂无商品',
+                    icon: 'none',
+                    duration: 2000
+                });
+                return;
             }
-        });
+            
+            // 创建商品列表，使用图标显示属性
+            const itemList = items.map(item => 
+                `${item.name} - 💰${item.cost} 🍖${item.satietyValue} 💝${item.happinessValue} ⭐${item.expValue}`
+            );
+            
+            console.log('商品列表:', itemList);
+            
+            // 显示商品列表
+            wx.showActionSheet({
+                itemList: itemList,
+                success: (res) => {
+                    const selectedItem = items[res.tapIndex];
+                    console.log('选择商品:', selectedItem);
+                    
+                    // 显示商品详情和购买选项
+                    wx.showModal({
+                        title: selectedItem.name,
+                        content: `${selectedItem.description}\n\n` +
+                                `💰 价格：${selectedItem.cost}金币\n\n` +
+                                `🍖 饱食度 +${selectedItem.satietyValue}\n` +
+                                `💝 幸福度 +${selectedItem.happinessValue}\n` +
+                                `⭐ 经验 +${selectedItem.expValue}`,
+                        showCancel: true,
+                        cancelText: '关闭',
+                        confirmText: '购买',
+                        success: (result) => {
+                            if (result.confirm) {
+                                this.purchaseItem(selectedItem);
+                            }
+                        }
+                    });
+                }
+            });
+        } catch (error) {
+            console.error('打开小卖部失败:', error);
+            wx.showToast({
+                title: '打开小卖部失败',
+                icon: 'none',
+                duration: 2000
+            });
+        }
     }
     
     purchaseItem(item) {
@@ -514,16 +569,20 @@ export class MainScene {
             return;
         }
         
-        // 将物品加到背包
+        // 扣除金币并添加物品到背包
+        this.coins -= item.cost;
         if (this.inventory.addItem(item.id, 1)) {
-            this.coins -= item.cost;
             wx.showToast({
                 title: '购买成功',
                 icon: 'success',
                 duration: 2000
             });
+            
+            // 保存数据
             this.saveUserData();
         } else {
+            // 如果添加物品失败，退还金币
+            this.coins += item.cost;
             wx.showToast({
                 title: '背包已满',
                 icon: 'error',
@@ -554,14 +613,16 @@ export class MainScene {
                 if (selectedItem && selectedItem.quantity > 0) {
                     // 使用道具
                     if (this.inventory.useItem(selectedItem.id)) {
-                        // 增加猫咪能量和幸福度
-                        this.cat.energy = Math.min(100, this.cat.energy + selectedItem.energyValue);
-                        this.cat.happiness = Math.min(100, this.cat.happiness + selectedItem.happinessValue);
+                        // 只增加饱食度
+                        this.cat.satiety = Math.min(100, this.cat.satiety + selectedItem.satietyValue);
                         
                         // 更新猫咪状态
                         this.cat.status = 'eating';
                         this.cat.showStatus = true;
                         this.cat.statusShowTime = 120;
+                        
+                        // 保存数据（只在成功使用食物后）
+                        this.saveUserData();
                         
                         // 显示提示
                         wx.showToast({
@@ -569,9 +630,6 @@ export class MainScene {
                             icon: 'success',
                             duration: 2000
                         });
-                        
-                        // 保存数据
-                        this.saveUserData();
                     }
                 }
             }
@@ -580,40 +638,38 @@ export class MainScene {
     
     update() {
         try {
-            // 检查是否需要重置今日签到状态
+            // 检查是否要重置今日签到状态
             const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            today.setUTCHours(0, 0, 0, 0);
             if (this.lastSignInDate) {
                 const lastDate = new Date(this.lastSignInDate);
-                lastDate.setHours(0, 0, 0, 0);
+                lastDate.setUTCHours(0, 0, 0, 0);
                 if (today.getTime() > lastDate.getTime()) {
                     this.hasSignedToday = false;
                 }
             }
             
-            // 更新金币累计
+            // 更新金币累计（每5秒加1个金币）
             const currentTime = Date.now();
             const timeDiff = currentTime - this.lastCoinTime;
-            if (timeDiff >= 60000) {
-                const coinsToAdd = Math.floor(timeDiff / 60000);
-                this.pendingCoins += coinsToAdd;
-                this.lastCoinTime = currentTime - (timeDiff % 60000);
-                
-                // 保存数据
-                this.saveUserData();
+            if (timeDiff >= 5000) { // 5秒检查一次
+                const coinsToAdd = Math.floor(timeDiff / 5000); // 每5秒1个金币
+                if (coinsToAdd > 0) {
+                    this.pendingCoins += coinsToAdd;
+                    this.lastCoinTime = currentTime - (timeDiff % 5000);
+                }
             }
             
             if (this.isLoading) {
                 // 更新加载动画
-                this.loadingFrame++;
-                if (this.loadingFrame % 15 === 0) {
-                    this.loadingDots = '.'.repeat((this.loadingFrame / 15) % 4);
-                }
+                const loadingDotCount = Math.floor((Date.now() % 2000) / 500); // 每500ms改变一次点的数量
+                this.loadingDots = '.'.repeat(loadingDotCount);
             } else if (this.cat) {
+                // 更新猫咪状态
                 this.cat.update();
             }
             
-            // 更新每日任务
+            // 更新每日任务，但不保存数据
             this.taskManager.resetDailyTasks();
             
             // 检查是否有可领取的任务
@@ -733,8 +789,8 @@ export class MainScene {
         // 计算状态面板的位置和大小
         const buttonSize = Math.min(this.canvas.width, this.canvas.height) * 0.12;
         const margin = buttonSize * 0.2;
-        const panelWidth = buttonSize * 2;
-        const panelHeight = buttonSize * 1.2;
+        const panelWidth = buttonSize * 1.5;  // 减小面板宽度，因为只显示金币
+        const panelHeight = buttonSize * 0.8;  // 减小面板高度
         const x = margin;
         const y = margin * 3;  // 将面板向下移动
         const radius = 10;
@@ -760,29 +816,18 @@ export class MainScene {
             this.ctx.lineWidth = 2;
             this.ctx.stroke();
             
-            // 绘制金币图标和数量
-            const iconSize = Math.min(panelWidth, panelHeight) * 0.3;
+            // 绘制金币图标数量
+            const iconSize = Math.min(panelWidth, panelHeight) * 0.4;
             this.ctx.font = `${iconSize}px Arial`;
             this.ctx.fillStyle = '#8B7355';
             this.ctx.textAlign = 'left';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('💰', x + margin, y + panelHeight * 0.3);
+            this.ctx.fillText('💰', x + margin, y + panelHeight/2);
             
             this.ctx.font = `${iconSize * 0.9}px Arial`;
             this.ctx.fillStyle = '#5C4033';
             this.ctx.textAlign = 'right';
-            this.ctx.fillText(this.coins.toString(), x + panelWidth - margin, y + panelHeight * 0.3);
-            
-            // 绘制猫粮图标和数量
-            this.ctx.font = `${iconSize}px Arial`;
-            this.ctx.fillStyle = '#8B7355';
-            this.ctx.textAlign = 'left';
-            this.ctx.fillText('🍖', x + margin, y + panelHeight * 0.75);
-            
-            this.ctx.font = `${iconSize * 0.9}px Arial`;
-            this.ctx.fillStyle = '#5C4033';
-            this.ctx.textAlign = 'right';
-            this.ctx.fillText(this.catFood.toString(), x + panelWidth - margin, y + panelHeight * 0.75);
+            this.ctx.fillText(this.coins.toString(), x + panelWidth - margin, y + panelHeight/2);
             
         } catch (error) {
             console.error('状态面板渲染失败:', error);
@@ -915,9 +960,9 @@ export class MainScene {
                 return;
             }
 
-            // 显示物品列表
+            // 显示物品列表，使用图标显示属性
             const itemList = items.map(item => 
-                `${item.name} x${item.quantity} - ${item.description}`
+                `${item.name} x${item.quantity} - 🍖${item.satietyValue} 💝${item.happinessValue} ⭐${item.expValue}`
             );
 
             wx.showActionSheet({
@@ -928,33 +973,17 @@ export class MainScene {
                     // 显示物品详情和使用选项
                     wx.showModal({
                         title: selectedItem.name,
-                        content: `${selectedItem.description}\n数量：${selectedItem.quantity}`,
+                        content: `${selectedItem.description}\n\n` +
+                                `📦 数量：${selectedItem.quantity}\n\n` +
+                                `🍖 饱食度 +${selectedItem.satietyValue}\n` +
+                                `💝 幸福度 +${selectedItem.happinessValue}\n` +
+                                `⭐ 经验 +${selectedItem.expValue}`,
+                        showCancel: true,
+                        cancelText: '关闭',
                         confirmText: '使用',
                         success: (result) => {
                             if (result.confirm) {
-                                // 使用物品
-                                if (selectedItem.type === ItemType.FOOD) {
-                                    // 使用食物
-                                    if (this.inventory.useItem(selectedItem.id)) {
-                                        this.cat.energy = Math.min(100, this.cat.energy + selectedItem.energyValue);
-                                        this.cat.happiness = Math.min(100, this.cat.happiness + selectedItem.happinessValue);
-                                        this.saveUserData();
-                                        wx.showToast({
-                                            title: `使用了${selectedItem.name}`,
-                                            icon: 'success'
-                                        });
-                                    }
-                                } else if (selectedItem.type === ItemType.EXP) {
-                                    // 使用经验书
-                                    if (this.inventory.useItem(selectedItem.id)) {
-                                        this.cat.gainExp(selectedItem.expValue);
-                                        this.saveUserData();
-                                        wx.showToast({
-                                            title: `获得${selectedItem.expValue}经验`,
-                                            icon: 'success'
-                                        });
-                                    }
-                                }
+                                this.useItem(selectedItem);
                             }
                         }
                     });
@@ -965,6 +994,55 @@ export class MainScene {
             wx.showToast({
                 title: '打开背包失败',
                 icon: 'none',
+                duration: 2000
+            });
+        }
+    }
+
+    useItem(item) {
+        if (!item || item.quantity <= 0) {
+            wx.showToast({
+                title: '物品数量不足',
+                icon: 'error',
+                duration: 2000
+            });
+            return;
+        }
+
+        // 使用物品并应用效果
+        if (this.inventory.useItem(item.id)) {
+            // 增加饱食度
+            if (item.satietyValue) {
+                this.cat.satiety = Math.min(100, this.cat.satiety + item.satietyValue);
+            }
+            
+            // 增加幸福度
+            if (item.happinessValue) {
+                this.cat.happiness = Math.min(100, this.cat.happiness + item.happinessValue);
+            }
+            
+            // 增加经验
+            if (item.expValue) {
+                this.cat.exp += item.expValue;
+                // 检查是否升级
+                while (this.cat.exp >= this.cat.maxExp) {
+                    this.cat.exp -= this.cat.maxExp;
+                    this.cat.level++;
+                    this.cat.maxExp = Math.floor(this.cat.maxExp * 1.2); // 每级所需经验增加20%
+                }
+            }
+            
+            // 更新猫咪状态
+            this.cat.showStatus = true;
+            this.cat.statusShowTime = 120;
+            
+            // 保存数据
+            this.saveUserData();
+            
+            // 显示使用效果
+            wx.showToast({
+                title: `使用了${item.name}`,
+                icon: 'success',
                 duration: 2000
             });
         }
