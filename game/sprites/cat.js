@@ -4,37 +4,10 @@ export class Cat {
         this.x = x;
         this.y = y;
         
-        // 基础属性
-        this.level = 1;
-        this.exp = 0;
-        this.maxExp = 100;
-        this.satiety = 50;  // 初始饱食度设为50
-        this.happiness = 50; // 初始幸福度设为50
-        
-        // 状态
-        this.status = 'normal';
-        this.showStatus = false;
-        this.statusShowTime = 0;
-        
-        // 移动相关
-        this.targetX = x;
-        this.targetY = y;
-        this.speed = 1;  // 基础速度
-        this.lastStateChangeTime = Date.now(); // 上次状态改变的时间
-        this.isMoving = false;
-        this.arrivalThreshold = 2;  // 到达目标点的阈值
-        this.direction = 1;  // 朝向：1为右，-1为左
-        this.moveDuration = 5000;  // 移动持续时间（5秒）
-        this.restDuration = 5000;  // 休息持续时间（5秒）
-        
-        // 成长阶段
-        this.growth = 'kitten';
-        
-        // 技能
-        this.skills = new Set();
-        
-        // 初始化触摸区域
-        this.touchArea = { width: 80, height: 80 };
+        // 状态相关
+        this.status = 'normal';  // normal, smile, leftsmile, rightsmile, sleep
+        this.statusTimer = 0;
+        this.nextStatusChange = Math.random() * 300 + 100;  // 3-7秒随机切换状态
         
         // 拖拽相关
         this.isDragging = false;
@@ -45,222 +18,128 @@ export class Cat {
         this.lastDragTime = 0;
         this.dragSpeed = 0;
         
-        // 活动范围
-        const margin = 100;
-        this.bounds = {
-            left: margin,
-            right: scene.canvas.width - margin,
-            top: margin,
-            bottom: scene.canvas.height - scene.canvas.height * 0.25 - margin
+        // 属性相关
+        this.level = 1;
+        this.exp = 0;
+        this.maxExp = 100;
+        this.satiety = 50;     // 饱食度
+        this.happiness = 50;   // 幸福度
+        
+        // 状态显示相关
+        this.showStatus = false;
+        this.statusShowTime = 0;
+        
+        // 加载白猫图片资源
+        this.images = {
+            normal: wx.createImage(),
+            smile: wx.createImage(),
+            leftsmile: wx.createImage(),
+            rightsmile: wx.createImage(),
+            sleep: wx.createImage()
         };
+        
+        // 添加图片加载完成的计数器
+        this.loadedImages = 0;
+        const totalImages = 5;
+
+        // 设置图片源
+        this.images.normal.src = './images/whitecat_normal.png';
+        this.images.smile.src = './images/whitecat_smile.png';
+        this.images.leftsmile.src = './images/whitecat_leftsmile.png';
+        this.images.rightsmile.src = './images/whitecat_rightsmile.png';
+        this.images.sleep.src = './images/whitecat_sleep.png';
+
+        // 添加调试日志
+        console.log('开始加载猫咪图片');
+        Object.entries(this.images).forEach(([key, img]) => {
+            img.onload = () => {
+                this.loadedImages++;
+                console.log(`猫咪图片 ${key} 加载完成，当前已加载 ${this.loadedImages} 张`);
+            };
+            img.onerror = (e) => {
+                console.error(`猫咪图片 ${key} 加载失败:`, e);
+            };
+        });
+        
+        // 设置图片大小
+        this.width = 100;
+        this.height = 100;
     }
-
-    startDragging(touchX, touchY) {
-        this.isDragging = true;
-        this.dragStartX = touchX;
-        this.dragStartY = touchY;
-        this.dragOffsetX = touchX - this.x;
-        this.dragOffsetY = touchY - this.y;
-        this.lastDragTime = Date.now();
-        this.isMoving = false; // 停止自动移动
-        
-        // 显示状态
-        this.showStatus = true;
-        this.statusShowTime = 120;
-    }
-
-    updateDragging(touchX, touchY) {
-        if (!this.isDragging) return;
-
-        const currentTime = Date.now();
-        const deltaTime = currentTime - this.lastDragTime;
-        
-        // 计算新位置
-        let newX = touchX - this.dragOffsetX;
-        let newY = touchY - this.dragOffsetY;
-        
-        // 限制在活动范围内
-        newX = Math.max(this.bounds.left, Math.min(this.bounds.right, newX));
-        newY = Math.max(this.bounds.top, Math.min(this.bounds.bottom, newY));
-        
-        // 计算拖拽速度
-        const deltaX = newX - this.x;
-        const deltaY = newY - this.y;
-        this.dragSpeed = Math.sqrt(deltaX * deltaX + deltaY * deltaY) / Math.max(1, deltaTime);
-        
-        // 更新位置
-        this.x = newX;
-        this.y = newY;
-        
-        // 更新朝向
-        if (Math.abs(deltaX) > 0.1) {
-            this.direction = deltaX > 0 ? 1 : -1;
-        }
-        
-        this.lastDragTime = currentTime;
-        
-        // 如果拖拽速度过快，降低幸福度
-        if (this.dragSpeed > 0.5) {
-            this.happiness = Math.max(0, this.happiness - 0.2);
-        }
-    }
-
-    stopDragging() {
-        if (!this.isDragging) return;
-        
-        this.isDragging = false;
-        
-        // 根据拖拽结束时的速度决定猫咪的反应
-        if (this.dragSpeed > 0.5) {
-            // 如果拖拽结束时速度较快，降低更多幸福度
-            this.happiness = Math.max(0, this.happiness - 5);
-            
-            // 随机选择一个远离当前位置的目标点
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * 200 + 100;
-            this.targetX = this.x + Math.cos(angle) * distance;
-            this.targetY = this.y + Math.sin(angle) * distance;
-            
-            // 确保目标点在活动范围内
-            this.targetX = Math.max(this.bounds.left, Math.min(this.bounds.right, this.targetX));
-            this.targetY = Math.max(this.bounds.top, Math.min(this.bounds.bottom, this.targetY));
-            
-            this.isMoving = true;
-        } else {
-            // 如果温柔放下，增��幸福度
-            this.happiness = Math.min(100, this.happiness + 2);
-        }
-        
-        // 重置拖拽相关数据
-        this.dragSpeed = 0;
-        this.lastDragTime = 0;
-    }
-
+    
     update() {
-        try {
-            // 更新状态显示时间
-            if (this.showStatus && this.statusShowTime > 0) {
+        // 更新状态计时器
+        this.statusTimer++;
+        if (this.statusTimer >= this.nextStatusChange && !this.isDragging) {
+            this.statusTimer = 0;
+            this.nextStatusChange = Math.random() * 300 + 100;
+            
+            // 随机选择新状态
+            const states = ['normal', 'smile', 'leftsmile', 'rightsmile', 'sleep'];
+            const currentIndex = states.indexOf(this.status);
+            let newIndex;
+            do {
+                newIndex = Math.floor(Math.random() * states.length);
+            } while (newIndex === currentIndex);
+            
+            this.status = states[newIndex];
+        }
+        
+        // 更新状态显示计时
+        if (this.showStatus) {
+            if (this.statusShowTime > 0) {
                 this.statusShowTime--;
-                if (this.statusShowTime <= 0) {
-                    this.showStatus = false;
-                }
+            } else {
+                this.showStatus = false;
             }
-
-            // 如果正在拖拽，跳过自动移动逻辑
-            if (this.isDragging) return;
-
-            // 检查是否需要切换状态
-            const currentTime = Date.now();
-            const timeSinceLastChange = currentTime - this.lastStateChangeTime;
-
-            if (this.isMoving && timeSinceLastChange >= this.moveDuration) {
-                // 从移动切换到静止
-                this.isMoving = false;
-                this.lastStateChangeTime = currentTime;
-            } else if (!this.isMoving && timeSinceLastChange >= this.restDuration) {
-                // 从静止切换到移动
-                this.findNewTarget();
-                this.lastStateChangeTime = currentTime;
-            }
-
-            // 如果正在移动，更新位置
-            if (this.isMoving && this.satiety > 0) {
-                const dx = this.targetX - this.x;
-                const dy = this.targetY - this.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                // 更新朝向
-                if (Math.abs(dx) > 0.1) {
-                    this.direction = dx > 0 ? 1 : -1;
-                }
-                
-                if (distance > this.arrivalThreshold) {
-                    // 使用饱食度调整速度，但限制最大速度
-                    const speedMultiplier = 0.5 + (this.satiety / 100);
-                    const maxSpeed = 2;
-                    const currentSpeed = Math.min(this.speed * speedMultiplier, maxSpeed);
-                    
-                    // 平滑移动
-                    this.x += (dx / distance) * currentSpeed;
-                    this.y += (dy / distance) * currentSpeed;
-                } else {
-                    // 到达目标点新的目标
-                    this.findNewTarget();
-                }
-            }
-        } catch (error) {
-            console.error('猫咪更新失败:', error);
         }
     }
-
-    findNewTarget() {
-        // 设置活动范围
-        const margin = 100;
-        const minX = margin;
-        const maxX = this.scene.canvas.width - margin;
-        const minY = margin;
-        const maxY = this.scene.canvas.height - this.scene.canvas.height * 0.25 - margin;
-        
-        // 在活动范围内随机选择一个目标点
-        this.targetX = Math.random() * (maxX - minX) + minX;
-        this.targetY = Math.random() * (maxY - minY) + minY;
-        this.isMoving = true;
-        console.log('猫咪设置新目标点:', { x: this.targetX, y: this.targetY });
-    }
-
+    
     render(ctx) {
         try {
-            // 检查是否有猫咪图片资源
-            const catImage = this.scene.game.resources.cat;
-            if (!catImage) {
-                console.error('猫咪图片资源未加载');
-                return;
-            }
-
             // 保存当前上下文状态
             ctx.save();
             
-            // 移动到猫咪位置
-            ctx.translate(this.x, this.y);
-            
-            // 根据朝向翻转图片
-            if (this.direction < 0) {
-                ctx.scale(-1, 1);
+            // 获取当前状态的图片
+            const image = this.images[this.status];
+            if (!image || !image.complete || !image.naturalWidth) {
+                console.warn('猫咪图片未完成加载:', this.status);
+                // 绘制加载提示
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#666666';
+                ctx.textAlign = 'center';
+                ctx.fillText('加载中...', this.x, this.y);
+                ctx.restore();
+                return;
             }
             
             // 绘制猫咪图片
             ctx.drawImage(
-                catImage,
-                -catImage.width / 2,
-                -catImage.height / 2,
-                catImage.width,
-                catImage.height
+                image,
+                this.x - this.width/2,
+                this.y - this.height/2,
+                this.width,
+                this.height
             );
+            
+            // 如果需要显示状态，绘制状态条
+            if (this.showStatus) {
+                this.renderStatus(ctx);
+            }
             
             // 恢复上下文状态
             ctx.restore();
             
-            // 如果显示状态为true，绘制状态条
-            if (this.showStatus) {
-                this.renderStatus(ctx);
-            }
         } catch (error) {
             console.error('猫咪渲染失败:', error);
+            ctx.restore();
         }
     }
 
     renderStatus(ctx) {
         try {
-            // 获取猫咪图片尺寸
-            const catImage = this.scene.game.resources.cat;
-            if (!catImage) {
-                console.error('猫咪图片资源未加载');
-                return;
-            }
-
             const barWidth = 100;  // 状态条宽度
             const barHeight = 6;   // 状态条高度
-            const margin = 12;     // 间距增加到12（原来是8）
+            const margin = 12;     // 间距
             const cornerRadius = 8; // 圆角半径
             const totalHeight = (barHeight + margin) * 3;  // 包含三个状态条的总高度
             
@@ -269,7 +148,7 @@ export class Cat {
             const panelWidth = barWidth + panelPadding * 2;
             const panelHeight = totalHeight + panelPadding * 2 + 30; // 额外高度用于显示等级
             const panelX = this.x - panelWidth/2;
-            const panelY = this.y + catImage.height/2 + 10; // 将面板放在猫咪图片下方
+            const panelY = this.y + this.height/2 + 10; // 将面板放在猫咪图片下方
             
             // 绘制阴影
             ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
@@ -369,7 +248,7 @@ export class Cat {
             ctx.textAlign = 'left';
             ctx.fillText(`${label}：${Math.floor(value)}/${maxValue}`, x, y - 4);
             
-            // 绘制状态条背��阴影
+            // 绘制状态条背景阴影
             ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
             ctx.shadowBlur = 2;
             ctx.shadowOffsetY = 1;
@@ -429,8 +308,8 @@ export class Cat {
     }
 
     checkTouched(x, y) {
-        const halfWidth = this.touchArea.width / 2;
-        const halfHeight = this.touchArea.height / 2;
+        const halfWidth = this.width / 2;
+        const halfHeight = this.height / 2;
         return x >= this.x - halfWidth && x <= this.x + halfWidth &&
                y >= this.y - halfHeight && y <= this.y + halfHeight;
     }
@@ -444,9 +323,76 @@ export class Cat {
             this.showStatus = true;
             this.statusShowTime = 120;  // 显示2秒
             
+            // 切换到微笑状态
+            this.status = 'smile';
+            this.statusTimer = 0;
+            this.nextStatusChange = 60;  // 1秒后恢复正常状态
+            
             console.log('猫咪被抚摸，幸福度:', this.happiness);
         } catch (error) {
             console.error('猫咪抚摸处理失败:', error);
         }
+    }
+
+    startDragging(touchX, touchY) {
+        this.isDragging = true;
+        this.dragStartX = touchX;
+        this.dragStartY = touchY;
+        this.dragOffsetX = touchX - this.x;
+        this.dragOffsetY = touchY - this.y;
+        this.lastDragTime = Date.now();
+        
+        // 显示状态
+        this.showStatus = true;
+        this.statusShowTime = 120;
+    }
+
+    updateDragging(touchX, touchY) {
+        if (!this.isDragging) return;
+
+        const currentTime = Date.now();
+        const deltaTime = currentTime - this.lastDragTime;
+        
+        // 计算新位置
+        let newX = touchX - this.dragOffsetX;
+        let newY = touchY - this.dragOffsetY;
+        
+        // 计算拖拽速度
+        const deltaX = newX - this.x;
+        const deltaY = newY - this.y;
+        this.dragSpeed = Math.sqrt(deltaX * deltaX + deltaY * deltaY) / Math.max(1, deltaTime);
+        
+        // 更新位置
+        this.x = newX;
+        this.y = newY;
+        
+        this.lastDragTime = currentTime;
+        
+        // 如果拖拽速度过快，降低幸福度
+        if (this.dragSpeed > 0.5) {
+            this.happiness = Math.max(0, this.happiness - 0.2);
+            this.status = 'leftsmile';  // 切换到不开心的表情
+        }
+    }
+
+    stopDragging() {
+        if (!this.isDragging) return;
+        
+        this.isDragging = false;
+        
+        // 根据拖拽结束时的速度决定猫咪的反应
+        if (this.dragSpeed > 0.5) {
+            // 如果拖拽结束时速度较快，降低更多幸福度
+            this.happiness = Math.max(0, this.happiness - 5);
+            this.status = 'leftsmile';  // 保持不开心的表情
+        } else {
+            // 如果温柔放下，增加幸福度
+            this.happiness = Math.min(100, this.happiness + 2);
+            this.status = 'smile';  // 切换到开心的表情
+        }
+        
+        // 重置拖拽相关数据
+        this.dragSpeed = 0;
+        this.lastDragTime = 0;
     }
 } 

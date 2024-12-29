@@ -526,17 +526,20 @@ export class MainScene {
                             // 显示确认购买对话框
                             wx.showModal({
                                 title: selectedItem.name,
-                                content: `确认购买 ${quantity} 个？\n\n` +
-                                        `单价：${selectedItem.cost}金币\n` +
-                                        `总价：${selectedItem.cost * quantity}金币\n\n` +
-                                        `效果预览：\n` +
-                                        `🍖 饱食度 +${selectedItem.satietyValue * quantity}\n` +
-                                        `💝 幸福度 +${selectedItem.happinessValue * quantity}\n` +
-                                        `⭐ 经验 +${selectedItem.expValue * quantity}`,
-                                cancelText: '取消',
-                                confirmText: '购买',
-                                success: (result) => {
-                                    if (result.confirm) {
+                                content: [
+                                    `确认购买 ${quantity} 个？`,
+                                    '\r\n',
+                                    `单价：${selectedItem.cost}金币`,
+                                    `总价：${selectedItem.cost * quantity}金币`,
+                                    '\r\n',
+                                    '效果预览：\r\n',
+                                    `  🍖 饱食度 +${selectedItem.satietyValue * quantity}`,
+                                    `  💝 幸福度 +${selectedItem.happinessValue * quantity}`,
+                                    `  ⭐ 经验 +${selectedItem.expValue * quantity}`
+                                ].join('\n'),
+                                showCancel: true,
+                                success: res => {
+                                    if (res.confirm) {
                                         this.purchaseItem(selectedItem, quantity);
                                     }
                                 }
@@ -1066,16 +1069,16 @@ export class MainScene {
             // 显示使用效果
             let resultText = `使用：${item.name} x${quantity}\n\n`;
             if (item.satietyValue) {
-                resultText += `饱食度：${oldSatiety} → ${this.cat.satiety}\n`;
+                resultText += `饱食度：${Math.floor(oldSatiety)} → ${Math.floor(this.cat.satiety)}\n`;
             }
             if (item.happinessValue) {
-                resultText += `幸福度：${oldHappiness} → ${this.cat.happiness}\n`;
+                resultText += `幸福度：${Math.floor(oldHappiness)} → ${Math.floor(this.cat.happiness)}\n`;
             }
             if (item.expValue) {
                 if (this.cat.level > oldLevel) {
                     resultText += `等级：${oldLevel} → ${this.cat.level}\n`;
                 }
-                resultText += `经验值：${oldExp} → ${this.cat.exp}/${this.cat.maxExp}`;
+                resultText += `经验值：${Math.floor(oldExp)} → ${Math.floor(this.cat.exp)}/${this.cat.maxExp}`;
             }
             
             wx.showModal({
