@@ -2,40 +2,44 @@ import { Cat } from '../game/sprites/cat'
 import { ITEMS, ItemType } from '../game/items/items';
 import { Inventory } from '../game/inventory';
 import { TaskManager } from '../game/tasks/task_manager';
+import { ActivityRewards } from '../game/activities/activity_rewards';
+import { platform } from '../game/utils/platform';
 
+/**
+ * 主场景类 - 游戏的核心场景
+ * 负责管理游戏的主要逻辑，包括：
+ * 1. 猫咪管理（创建、切换、状态更新）
+ * 2. 用户界面（按钮、状态栏、商店等）
+ * 3. 游戏数据（金币、物品、任务等）
+ */
 export class MainScene {
     constructor(game) {
         this.game = game;
         this.canvas = game.canvas;
         this.ctx = game.ctx;
         
-        // 用户数据
-        this.userData = null;      // 用户数据
-        this.isLoggedIn = false;   // 登录状态
+        // 用户数据相关
+        this.userData = null;      // 用户数据存储
+        this.isLoggedIn = false;   // 登录状态标记
         
-        // 猫咪相关
-        this.cats = [];           // 所有猫咪
-        this.currentCatIndex = 0; // 当前选中的猫咪
-        this.maxCats = 3;        // 最大猫咪数量
+        // 猫咪管理相关
+        this.cats = [];           // 猫咪列表
+        this.currentCatIndex = 0; // 当前选中的猫咪索引
+        this.maxCats = 3;        // 最大猫咪数量限制
         
-        // 初始化数据
-        this.coins = 0;     // 金币
-        this.catFood = 0;   // 猫粮数量
-        this.isLoading = true;  // 加载状态
-        this.loadingProgress = 0;  // 加载进度
-        this.loadingDots = '';  // 加载动画点
-        this.loadingFrame = 0;  // 加载动画帧
+        // 游戏基础数据
+        this.coins = 0;          // 金币数量
+        this.catFood = 0;        // 猫粮数量
+        this.isLoading = true;   // 加载状态标记
+        this.loadingProgress = 0; // 加载进度
+        this.loadingDots = '';   // 加载动画点
+        this.loadingFrame = 0;   // 加载动画帧
         
-        // 添加金币累计相关属性
-        this.pendingCoins = 0;    // 待领取的金币数
+        // 金币累计系统
+        this.pendingCoins = 0;    // 待领取的金币
         this.lastCoinTime = Date.now();  // 上次累计金币的时间
         
-        // 添加签到相关属性
-        this.signInDays = 0;      // 连续签到天数
-        this.lastSignInDate = null;  // 上次签到日期（UTC时
-        this.hasSignedToday = false; // 今日是否已签到
-        
-        // 修改按钮布局
+        // 界面布局相关
         const buttonSize = Math.min(this.canvas.width, this.canvas.height) * 0.12;
         const margin = buttonSize * 0.2;
         const bottomY = this.canvas.height - buttonSize * 2;
@@ -43,6 +47,7 @@ export class MainScene {
         const totalWidth = buttonSize * totalButtons + margin * (totalButtons - 1);
         const startX = (this.canvas.width - totalWidth) / 2;
         
+        // 按钮配置
         this.buttons = {
             task: {
                 x: startX,
@@ -111,6 +116,11 @@ export class MainScene {
         this.showStatusPanels = true;
         this.lastInteractionTime = Date.now();
         this.panelHideDelay = 5000; // 5秒后隐藏
+        
+        // UI显示控制
+        this.showStatusPanels = true;          // 状态面板显示标记
+        this.lastInteractionTime = Date.now();  // 最后交互时间
+        this.panelHideDelay = 5000;            // 面板自动隐藏延迟(5秒)
         
         console.log('主场景创建成功');
     }
@@ -203,7 +213,8 @@ export class MainScene {
             lastSignInDate: null,
             hasSignedToday: false,
             lastCoinTime: Date.now(),
-            pendingCoins: 0
+            pendingCoins: 0,
+            activityRewards: null  // 添加活动奖励数据
         };
         
         // 使用默认数据
@@ -214,6 +225,11 @@ export class MainScene {
         this.hasSignedToday = defaultData.hasSignedToday;
         this.lastCoinTime = defaultData.lastCoinTime;
         this.pendingCoins = defaultData.pendingCoins;
+        
+        // 恢复活动奖励数据
+        if (data.activityRewards) {
+            this.activityRewards.fromJSON(data.activityRewards);
+        }
         
         console.log('加载默认数据成功');
     }
@@ -233,7 +249,6 @@ export class MainScene {
             maxExp: cat.maxExp,
             satiety: cat.satiety,
             happiness: cat.happiness,
-            energy: cat.energy,
             skills: cat.skills,
             favoriteFood: cat.favoriteFood,
             favoriteToy: cat.favoriteToy
@@ -245,10 +260,9 @@ export class MainScene {
             currentCatIndex: this.currentCatIndex
         };
 
-        // 保存数据
-        try {
-            wx.setStorageSync('gameData_local', {
-                ...this.userData,
+        // 准备要保存的数据
+        const saveData = {
+            ...this.userData,
             coins: this.coins,
             catFood: this.catFood,
             signInDays: this.signInDays,
@@ -256,10 +270,19 @@ export class MainScene {
             hasSignedToday: this.hasSignedToday,
             lastCoinTime: this.lastCoinTime,
             pendingCoins: this.pendingCoins,
-            inventory: this.inventory.toJSON(),
-            tasks: this.taskManager.toJSON(),
+            inventory: this.inventory ? this.inventory.toJSON() : null,
+            tasks: this.taskManager ? this.taskManager.toJSON() : null,
             lastSaveTime: Date.now()
-            });
+        };
+
+        // 只在activityRewards存在时添加其数据
+        if (this.activityRewards) {
+            saveData.activityRewards = this.activityRewards.toJSON();
+        }
+
+        // 保存数据
+        try {
+            platform.setStorage('gameData_local', saveData);
             console.log('保存游戏数据成功');
         } catch (error) {
             console.error('保存游戏数据失败:', error);
@@ -290,7 +313,7 @@ export class MainScene {
             
             if (endpoint === 'getUserData') {
                 // 尝试从本地存储获取数据
-                const localData = wx.getStorageSync('gameData_dev');
+                const localData = platform.getStorage('gameData_dev');
                 if (localData) {
                     return {
                         success: true,
@@ -315,7 +338,7 @@ export class MainScene {
             
             if (endpoint === 'saveUserData') {
                 // 保存到本地存储
-                wx.setStorageSync('gameData_dev', data.gameData);
+                platform.setStorage('gameData_dev', data.gameData);
                 return {
                     success: true,
                     message: '保存成功'
@@ -471,14 +494,14 @@ export class MainScene {
                     this.openBag();
                     break;
                 case 'activity':
-                    this.openActivity();
+                    this.startMiniGame();
                     break;
                 default:
                     console.warn('未知的按钮:', buttonKey);
             }
         } catch (error) {
             console.error('按钮点击处理失败:', error);
-            wx.showToast({
+            platform.showToast({
                 title: '操作失败',
                 icon: 'none',
                 duration: 2000
@@ -491,7 +514,7 @@ export class MainScene {
         today.setUTCHours(0, 0, 0, 0);
         
         if (this.hasSignedToday) {
-            wx.showToast({
+            platform.showToast({
                 title: '今日已签到',
                 icon: 'error',
                 duration: 2000
@@ -527,7 +550,7 @@ export class MainScene {
         this.saveUserData();
         
         // 显示奖励信息
-        wx.showModal({
+        platform.showModal({
             title: '签到成功',
             content: `连续签到${this.signInDays}天\n获得${reward}金币`,
             showCancel: false
@@ -543,13 +566,13 @@ export class MainScene {
             // 保存数据（只在实际领取金币时）
             this.saveUserData();
             
-            wx.showToast({
+            platform.showToast({
                 title: `领取${collectedAmount}金币`,
                 icon: 'success',
                 duration: 2000
             });
         } else {
-            wx.showToast({
+            platform.showToast({
                 title: '暂无可领取金币',
                 icon: 'error',
                 duration: 2000
@@ -559,7 +582,7 @@ export class MainScene {
     
     openActivity() {
         // 暂时使用提示框代替页面跳转
-        wx.showModal({
+        platform.showModal({
             title: '小游戏',
             content: '小游戏在开发中，敬请期待！',
             showCancel: false
@@ -592,13 +615,13 @@ export class MainScene {
             ];
             
             // 显示商品分类选择
-            wx.showActionSheet({
+            platform.showActionSheet({
                 itemList: ['食物道具', '特殊商品'],
                 success: (res) => {
                     if (res.tapIndex === 0) {
                         // 显示食物道具列表
                         if (foodItems.length === 0) {
-                wx.showToast({
+                platform.showToast({
                     title: '暂无商品',
                     icon: 'none',
                     duration: 2000
@@ -610,7 +633,7 @@ export class MainScene {
                 `${item.name} - 💰${item.cost} 🍖${item.satietyValue} 💝${item.happinessValue} ⭐${item.expValue}`
             );
             
-            wx.showActionSheet({
+            platform.showActionSheet({
                 itemList: itemList,
                             success: (itemRes) => {
                                 const selectedItem = foodItems[itemRes.tapIndex];
@@ -623,7 +646,7 @@ export class MainScene {
                             `${item.name} - 💰${item.price}`
                         );
                         
-                        wx.showActionSheet({
+                        platform.showActionSheet({
                             itemList: itemList,
                             success: (itemRes) => {
                                 const selectedItem = specialItems[itemRes.tapIndex];
@@ -635,7 +658,7 @@ export class MainScene {
             });
         } catch (error) {
             console.error('打开小卖部失败:', error);
-            wx.showToast({
+            platform.showToast({
                 title: '打开小卖部失败',
                 icon: 'none',
                 duration: 2000
@@ -647,14 +670,14 @@ export class MainScene {
     showFoodPurchaseDialog(selectedItem) {
         // 选择数量
                     const quantityList = ['1个', '5个', '10个', '20个', '50个', '99个'];
-                    wx.showActionSheet({
+                    platform.showActionSheet({
                         itemList: quantityList,
                         success: (qRes) => {
                             const quantities = [1, 5, 10, 20, 50, 99];
                             const quantity = quantities[qRes.tapIndex];
                             
                             // 显示确认购买对话框
-                            wx.showModal({
+                            platform.showModal({
                                 title: selectedItem.name,
                                 content: [
                                     `确认购买 ${quantity} 个？`,
@@ -681,14 +704,14 @@ export class MainScene {
     // 购买特殊商品
     purchaseSpecialItem(item) {
         if (this.coins < item.price) {
-            wx.showToast({
+            platform.showToast({
                 title: '金币不足',
                 icon: 'none'
             });
             return;
         }
 
-        wx.showModal({
+        platform.showModal({
             title: '确认购买',
             content: `是否花费${item.price}金币购买${item.name}？\n\n${item.description}`,
             success: async (res) => {
@@ -708,7 +731,7 @@ export class MainScene {
         const totalCost = item.cost * quantity;
         
         if (!item || !item.cost) {
-            wx.showToast({
+            platform.showToast({
                 title: '商品无效',
                 icon: 'error',
                 duration: 2000
@@ -717,7 +740,7 @@ export class MainScene {
         }
         
         if (this.coins < totalCost) {
-            wx.showToast({
+            platform.showToast({
                 title: '金币不足',
                 icon: 'error',
                 duration: 2000
@@ -728,7 +751,7 @@ export class MainScene {
         // 扣除金币并添加物品到背包
         this.coins -= totalCost;
         if (this.inventory.addItem(item.id, quantity)) {
-            wx.showModal({
+            platform.showModal({
                 title: '购买成功',
                 content: `${item.name} x${quantity}\n` +
                         `消耗金币：${totalCost}\n` +
@@ -741,7 +764,7 @@ export class MainScene {
         } else {
             // 如果添加物品失败，退还金币
             this.coins += totalCost;
-            wx.showToast({
+            platform.showToast({
                 title: '背包已满',
                 icon: 'error',
                 duration: 2000
@@ -753,7 +776,7 @@ export class MainScene {
         // 获取背包中的食物道具
         const foodItems = this.inventory.getItemsByType(ItemType.FOOD);
         if (foodItems.length === 0) {
-            wx.showToast({
+            platform.showToast({
                 title: '没有食物道具',
                 icon: 'none',
                 duration: 2000
@@ -764,7 +787,7 @@ export class MainScene {
         // 显示食物选择界面
         const itemList = foodItems.map(item => `${item.name} (剩余${item.quantity}个)`);
         
-        wx.showActionSheet({
+        platform.showActionSheet({
             itemList: itemList,
             success: (res) => {
                 const selectedItem = foodItems[res.tapIndex];
@@ -783,7 +806,7 @@ export class MainScene {
                         this.saveUserData();
                         
                         // 显示提示
-                        wx.showToast({
+                        platform.showToast({
                             title: `使用了${selectedItem.name}`,
                             icon: 'success',
                             duration: 2000
@@ -1182,7 +1205,7 @@ export class MainScene {
             };
         });
         
-        wx.showActionSheet({
+        platform.showActionSheet({
             itemList: taskList.map(item => item.text),
             success: (res) => {
                 const selectedTask = taskList[res.tapIndex].task;
@@ -1211,7 +1234,7 @@ export class MainScene {
                             });
                         }
                         
-                        wx.showModal({
+                        platform.showModal({
                             title: '任务完成',
                             content: rewardText,
                             showCancel: false,
@@ -1237,7 +1260,7 @@ export class MainScene {
                         });
                     }
                     
-                    wx.showModal({
+                    platform.showModal({
                         title: selectedTask.name,
                         content: content,
                         showCancel: false
@@ -1261,7 +1284,7 @@ export class MainScene {
             }
 
             if (items.length === 0) {
-                wx.showToast({
+                platform.showToast({
                     title: '背包是空的',
                     icon: 'none',
                     duration: 2000
@@ -1274,7 +1297,7 @@ export class MainScene {
                 `${item.name} x${item.quantity} - 🍖${item.satietyValue} 💝${item.happinessValue} ⭐${item.expValue}`
             );
 
-            wx.showActionSheet({
+            platform.showActionSheet({
                 itemList: itemList,
                 success: (res) => {
                     const selectedItem = items[res.tapIndex];
@@ -1284,13 +1307,13 @@ export class MainScene {
                     const quantities = [1, 5, 10, 20, 50, 99].filter(q => q <= maxQuantity);
                     const quantityList = quantities.map(q => `${q}个`);
                     
-                    wx.showActionSheet({
+                    platform.showActionSheet({
                         itemList: quantityList,
                         success: (qRes) => {
                             const quantity = quantities[qRes.tapIndex];
                             
                             // 显示确认使用对话框
-                            wx.showModal({
+                            platform.showModal({
                                 title: selectedItem.name,
                                 content: `确认使用 ${quantity} 个？\n\n` +
                                         `效果预览：\n` +
@@ -1311,7 +1334,7 @@ export class MainScene {
             });
         } catch (error) {
             console.error('打开背包失败:', error);
-            wx.showToast({
+            platform.showToast({
                 title: '打开背包失败',
                 icon: 'none',
                 duration: 2000
@@ -1321,7 +1344,7 @@ export class MainScene {
 
     useItem(item, quantity = 1) {
         if (!item || item.quantity < quantity) {
-            wx.showToast({
+            platform.showToast({
                 title: '物品数量不足',
                 icon: 'error',
                 duration: 2000
@@ -1332,7 +1355,7 @@ export class MainScene {
         // 获取当前选中的猫咪
         const currentCat = this.getCurrentCat();
         if (!currentCat) {
-            wx.showToast({
+            platform.showToast({
                 title: '请先选择一只猫咪',
                 icon: 'none',
                 duration: 2000
@@ -1401,7 +1424,7 @@ export class MainScene {
                 resultText += `经验值：${Math.floor(oldExp)} → ${Math.floor(currentCat.exp)}/${currentCat.maxExp}`;
             }
             
-            wx.showModal({
+            platform.showModal({
                 title: `${currentCat.name} 使用成功`,
                 content: resultText,
                 showCancel: false,
@@ -1409,7 +1432,7 @@ export class MainScene {
                     // 检查是否有任务完成
                     const claimableTasks = this.taskManager.getClaimableTasks();
                     if (claimableTasks.length > 0) {
-                        wx.showModal({
+                        platform.showModal({
                             title: '任务完成提醒',
                             content: '有新的任务完成了，快去领取奖励吧！',
                             confirmText: '去领取',
@@ -1428,7 +1451,7 @@ export class MainScene {
     // 添加新的猫咪管理方法
     async addNewCat(type = 'white') {
         if (this.cats.length >= this.maxCats) {
-            wx.showToast({
+            platform.showToast({
                 title: '已达到最大猫咪数量',
                 icon: 'none'
             });
@@ -1455,7 +1478,7 @@ export class MainScene {
         this.currentCatIndex = this.cats.length - 1;
         await this.saveUserData();
         
-        wx.showToast({
+        platform.showToast({
             title: `${newCat.name}加入了家庭！`,
             icon: 'none'
         });
@@ -1470,7 +1493,7 @@ export class MainScene {
     switchCat() {
         if (this.cats.length <= 1) return;
         this.currentCatIndex = (this.currentCatIndex + 1) % this.cats.length;
-        wx.showToast({
+        platform.showToast({
             title: `切换到猫咪 ${this.currentCatIndex + 1}`,
             icon: 'none'
         });
@@ -1504,7 +1527,7 @@ export class MainScene {
             `${skill.displayName} Lv.${skill.level} (${skill.growthRate}级天赋)`
         );
 
-        wx.showModal({
+        platform.showModal({
             title: `${info.name} 的详细信息`,
             content: [
                 `性格：${info.personality}`,
@@ -1515,7 +1538,6 @@ export class MainScene {
                 `经验：${Math.floor(info.exp)}/${info.maxExp}`,
                 `饱食度：${Math.floor(info.satiety)}/100`,
                 `幸福度：${Math.floor(info.happiness)}/100`,
-                `能量：${Math.floor(info.energy)}/100`,
                 `心情：${info.mood}`,
                 '',
                 '技能：',
@@ -1537,7 +1559,7 @@ export class MainScene {
     showSkillTraining() {
         const currentCat = this.getCurrentCat();
         if (!currentCat) {
-            wx.showToast({
+            platform.showToast({
                 title: '请先选择一只猫咪',
                 icon: 'none',
                 duration: 2000
@@ -1548,7 +1570,7 @@ export class MainScene {
         // 检查猫咪是否有技能属性
         if (!currentCat.skills) {
             console.error('猫咪技能数据缺失');
-            wx.showToast({
+            platform.showToast({
                 title: '猫咪数据异常',
                 icon: 'none',
                 duration: 2000
@@ -1573,7 +1595,7 @@ export class MainScene {
             return `${skillNames[skillName]} Lv.${skill.level || 0}`;
         });
 
-        wx.showActionSheet({
+        platform.showActionSheet({
             itemList: skillList,
             success: (res) => {
                 const selectedSkill = Object.keys(skillNames)[res.tapIndex];
@@ -1608,7 +1630,7 @@ export class MainScene {
             ...info.trainingTips.map((tip, index) => `${index + 1}. ${tip}`)
         ].join('\n');
 
-        wx.showModal({
+        platform.showModal({
             title: `${currentCat.name}的${skillNames[skillName]}技能`,
             content: content,
             confirmText: '开始训练',
@@ -1628,72 +1650,70 @@ export class MainScene {
         // 根据技能类型定义难度系数
         const difficultyFactors = {
             stamina: {
-                energy: 1.2,    // 体能训练消耗较多能量
                 satiety: 1.5,   // 消耗较多饱食度
                 baseExp: 12     // 基础经验较高
             },
             charm: {
-                energy: 0.8,    // 魅力训练消耗较少能量
                 satiety: 0.8,   // 消耗较少饱食度
                 baseExp: 10     // 标准经验
             },
             strength: {
-                energy: 1.5,    // 力量训练消耗最多能量
                 satiety: 1.3,   // 消耗较多饱食度
                 baseExp: 15     // 最高基础经验
             },
             fortune: {
-                energy: 1.0,    // 标准能量消耗
                 satiety: 1.0,   // 标准饱食度消耗
                 baseExp: 8      // 经验较少
             }
         };
 
         const difficulty = difficultyFactors[skillName] || {
-            energy: 1.0,
             satiety: 1.0,
             baseExp: 10
         };
 
         // 基础消耗值
-        const baseEnergyCost = 15;    // 提高基础能量消耗
-        const baseSatietyCost = 20;   // 提高基础饱食度消耗
+        const baseSatietyCost = 20;
 
         // 计算实际消耗
-        const energyCost = Math.floor(baseEnergyCost * difficulty.energy);
         const satietyCost = Math.floor(baseSatietyCost * difficulty.satiety);
 
-        // 检查能量是否足够
-        if (currentCat.energy < energyCost * 1.5) {  // 降低能量要求
-            wx.showToast({
-                title: '猫咪太累了，需要休息',
-                icon: 'none'
-            });
-            return;
-        }
-
         // 检查饱食度是否足够
-        if (currentCat.satiety < satietyCost * 1.5) {  // 降低饱食度要求
-            wx.showToast({
+        if (!currentCat.satiety || currentCat.satiety < satietyCost) {
+            platform.showToast({
                 title: '猫咪饿了，需要先喂食',
                 icon: 'none'
             });
             return;
         }
 
-        // 消耗能量和饱食度
-        currentCat.energy = Math.max(0, currentCat.energy - energyCost);
+        // 消耗饱食度
         currentCat.satiety = Math.max(0, currentCat.satiety - satietyCost);
 
         // 获得经验（基础经验 + 随机波动 + 天赋加成）
         const baseExp = difficulty.baseExp;
         const randomBonus = Math.floor(Math.random() * 5);
-        const talent = currentCat.getSkillTalent(skillName);
-        const talentBonus = Math.floor(talent / 20);  // 每20点天赋增加1点经验
+        const talent = currentCat.getSkillTalent ? currentCat.getSkillTalent(skillName) : 1;
+        const talentBonus = Math.floor(talent / 20);
         const expGain = baseExp + randomBonus + talentBonus;
 
-        // 增加技能经验
-        currentCat.addSkillExp(skillName, expGain);
+        // 更新技能等级和经验
+        if (!currentCat.skills[skillName]) {
+            currentCat.skills[skillName] = {
+                level: 1,
+                exp: 0
+            };
+        }
+
+        const skill = currentCat.skills[skillName];
+        skill.exp += expGain;
+
+        // 检查是否升级
+        const expNeededForLevel = (level) => Math.floor(100 * Math.pow(1.2, level - 1));
+        while (skill.exp >= expNeededForLevel(skill.level)) {
+            skill.exp -= expNeededForLevel(skill.level);
+            skill.level += 1;
+        }
 
         // 更新训练任务进度
         this.taskManager.updateTask('daily_training');
@@ -1702,7 +1722,6 @@ export class MainScene {
         this.saveUserData();
 
         // 显示训练结果
-        const info = currentCat.getDetailedSkillInfo(skillName);
         const skillNames = {
             stamina: '体力',
             charm: '魅力',
@@ -1710,16 +1729,14 @@ export class MainScene {
             fortune: '招财'
         };
 
-        wx.showModal({
+        platform.showModal({
             title: '训练完成',
             content: [
                 `${currentCat.name}完成了${skillNames[skillName]}训练！`,
-                `消耗能量：${energyCost}`,
                 `消耗饱食度：${satietyCost}`,
                 `获得经验：${expGain}`,
-                `当前等级：${info.level}`,
-                `经验进度：${Math.floor(info.exp)}/${info.maxExp}`,
-                `剩余能量：${Math.floor(currentCat.energy)}/100`,
+                `当前等级：${skill.level}`,
+                `经验进度：${Math.floor(skill.exp)}/${expNeededForLevel(skill.level)}`,
                 `剩余饱食度：${Math.floor(currentCat.satiety)}/100`
             ].join('\n'),
             showCancel: false,
@@ -1727,7 +1744,7 @@ export class MainScene {
                 // 检查是否有任务完成
                 const claimableTasks = this.taskManager.getClaimableTasks();
                 if (claimableTasks.length > 0) {
-                    wx.showModal({
+                    platform.showModal({
                         title: '任务完成提醒',
                         content: '有新的任务完成了，快去领取奖励吧！',
                         confirmText: '去领取',
@@ -1769,13 +1786,13 @@ export class MainScene {
             ];
             
             // 显示商品分类选择
-            wx.showActionSheet({
+            platform.showActionSheet({
                 itemList: ['食物道具', '特殊商品'],
                 success: (res) => {
                     if (res.tapIndex === 0) {
                         // 显示食物道具列表
                         if (foodItems.length === 0) {
-                            wx.showToast({
+                            platform.showToast({
                                 title: '暂无商品',
                                 icon: 'none',
                                 duration: 2000
@@ -1787,7 +1804,7 @@ export class MainScene {
                             `${item.name} - 💰${item.cost} 🍖${item.satietyValue} 💝${item.happinessValue} ⭐${item.expValue}`
                         );
                         
-                        wx.showActionSheet({
+                        platform.showActionSheet({
                             itemList: itemList,
                             success: (itemRes) => {
                                 const selectedItem = foodItems[itemRes.tapIndex];
@@ -1800,7 +1817,7 @@ export class MainScene {
                             `${item.name} - 💰${item.price}`
                         );
                         
-                        wx.showActionSheet({
+                        platform.showActionSheet({
                             itemList: itemList,
                             success: (itemRes) => {
                                 const selectedItem = specialItems[itemRes.tapIndex];
@@ -1812,7 +1829,7 @@ export class MainScene {
             });
         } catch (error) {
             console.error('打开小卖部失败:', error);
-            wx.showToast({
+            platform.showToast({
                 title: '打开小卖部失败',
                 icon: 'none',
                 duration: 2000
@@ -1824,14 +1841,14 @@ export class MainScene {
     showFoodPurchaseDialog(selectedItem) {
         // 选择数量
         const quantityList = ['1个', '5个', '10个', '20个', '50个', '99个'];
-        wx.showActionSheet({
+        platform.showActionSheet({
             itemList: quantityList,
             success: (qRes) => {
                 const quantities = [1, 5, 10, 20, 50, 99];
                 const quantity = quantities[qRes.tapIndex];
                 
                 // 显示确认购买对话框
-                wx.showModal({
+                platform.showModal({
                     title: selectedItem.name,
                     content: [
                         `确认购买 ${quantity} 个？`,
@@ -1858,14 +1875,14 @@ export class MainScene {
     // 购买特殊商品
     purchaseSpecialItem(item) {
         if (this.coins < item.price) {
-            wx.showToast({
+            platform.showToast({
                 title: '金币不足',
                 icon: 'none'
             });
             return;
         }
 
-        wx.showModal({
+        platform.showModal({
             title: '确认购买',
             content: `是否花费${item.price}金币购买${item.name}？\n\n${item.description}`,
             success: async (res) => {
@@ -1894,5 +1911,50 @@ export class MainScene {
             text: '商店',
             icon: '🏪'
         };
+    }
+
+    startMiniGame() {
+        // 保存当前游戏状态
+        this.saveUserData();
+        
+        // 检查每日首次游戏奖励
+        this.activityRewards.checkDailyReward();
+
+        try {
+            // 使用相对路径跳转到小游戏页面
+            const minigamePath = '#/minigame';
+            console.log('正在跳转到小游戏页面:', minigamePath);
+            
+            // 使用history API进行跳转
+            if (window.history && window.history.pushState) {
+                window.history.pushState({}, '小游戏', minigamePath);
+                // 触发路由更新事件
+                window.dispatchEvent(new Event('popstate'));
+            } else {
+                // 降级方案：直接修改hash
+                window.location.hash = 'minigame';
+            }
+        } catch (error) {
+            console.error('跳转到小游戏场景失败:', error);
+            // 显示错误提示
+            const errorMsg = document.createElement('div');
+            errorMsg.style.position = 'fixed';
+            errorMsg.style.top = '50%';
+            errorMsg.style.left = '50%';
+            errorMsg.style.transform = 'translate(-50%, -50%)';
+            errorMsg.style.padding = '20px';
+            errorMsg.style.background = 'rgba(0,0,0,0.8)';
+            errorMsg.style.color = 'white';
+            errorMsg.style.borderRadius = '5px';
+            errorMsg.textContent = '加载失败，请重试';
+            document.body.appendChild(errorMsg);
+            setTimeout(() => errorMsg.remove(), 2000);
+        }
+    }
+
+    // 处理小游戏完成
+    handleMiniGameComplete() {
+        // 发放通关奖励
+        this.activityRewards.giveCompletionReward();
     }
 } 

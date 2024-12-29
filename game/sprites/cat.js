@@ -1,63 +1,70 @@
+/**
+ * 猫咪类 - 游戏中的主要角色
+ * 负责管理单个猫咪的所有属性和行为，包括：
+ * 1. 基础属性（名字、外观、性格等）
+ * 2. 状态属性（饱食度、心情、经验等）
+ * 3. 技能系统（体力、魅力、力量、招财）
+ * 4. 动画效果（移动、表情、状态显示）
+ */
 export class Cat {
     constructor(scene, x, y, type = 'white') {
         this.scene = scene;
         this.x = x;
         this.y = y;
-        this.type = type;  // 猫咪类型
+        this.type = type;  // 猫咪类型（白猫/黑猫）
         
-        // 基本信息
+        // 基础属性
         this.name = '未命名';     // 猫咪名字
-        this.color = type === 'black' ? '黑色' : this.randomColor();  // 猫咪颜色
+        this.color = type === 'black' ? '黑色' : this.randomColor();  // 毛色
         this.personality = this.randomPersonality();  // 性格特征
         this.pattern = type === 'black' ? '纯色' : this.randomPattern(); // 花纹特征
         this.eyeColor = type === 'black' ? '金色' : this.randomEyeColor(); // 眼睛颜色
         this.specialTrait = this.randomSpecialTrait(); // 特殊特征
         
-        // 性格影响的属性
+        // 性格影响系统
         this.personalityEffects = this.initPersonalityEffects();
         
-        // 状态相关
-        this.status = 'normal';  // normal, smile, leftsmile, rightsmile, sleep
-        this.statusTimer = 0;
-        this.nextStatusChange = Math.random() * 300 + 100;
-        this.mood = 'normal';    // normal, happy, sad, excited, tired
-        this.energy = 100;       // 能量值
+        // 状态系统
+        this.status = 'normal';  // 当前状态：normal(普通), smile(微笑), sleep(睡觉)
+        this.statusTimer = 0;    // 状态计时器
+        this.nextStatusChange = Math.random() * 300 + 100;  // 下次状态改变时间
+        this.mood = 'normal';    // 心情：normal(普通), happy(开心), sad(难过)
         
-        // 技能相关
-        this.skills = this.initSkills();
-        this.favoriteFood = this.randomFavoriteFood();
-        this.favoriteToy = this.randomFavoriteToy();
+        // 技能系统
+        this.skills = this.initSkills();  // 初始化技能
+        this.favoriteFood = this.randomFavoriteFood();  // 喜爱的食物
+        this.favoriteToy = this.randomFavoriteToy();   // 喜爱的玩具
         
-        // 动画相关
-        this.scale = 1;
-        this.rotation = 0;
-        this.targetRotation = 0;
-        this.bobOffset = 0;
-        this.bobSpeed = 0.002;
-        this.bobAmount = 1.5;
-        this.scaleOffset = 0;
-        this.scaleSpeed = 0.001;
-        this.scaleAmount = 0.02;
+        // 动画系统
+        this.scale = 1;          // 缩放比例
+        this.rotation = 0;       // 旋转角度
+        this.targetRotation = 0; // 目标旋转角度
+        this.bobOffset = 0;      // 上下浮动偏移
+        this.bobSpeed = 0.002;   // 浮动速度
+        this.bobAmount = 1.5;    // 浮动幅度
+        this.scaleOffset = 0;    // 缩放偏移
+        this.scaleSpeed = 0.001; // 缩放速度
+        this.scaleAmount = 0.02; // 缩放幅度
         
-        // 拖拽相关
-        this.isDragging = false;
-        this.dragOffsetX = 0;
-        this.dragOffsetY = 0;
-        this.dragStartX = 0;
-        this.dragStartY = 0;
-        this.lastDragTime = 0;
-        this.dragSpeed = 0;
+        // 拖拽系统
+        this.isDragging = false;   // 是否正在拖拽
+        this.dragOffsetX = 0;      // 拖拽X偏移
+        this.dragOffsetY = 0;      // 拖拽Y偏移
+        this.dragStartX = 0;       // 拖拽起始X
+        this.dragStartY = 0;       // 拖拽起始Y
+        this.lastDragTime = 0;     // 上次拖拽时间
+        this.dragSpeed = 0;        // 拖拽速度
         
-        // 属性相关
-        this.level = 1;
-        this.exp = 0;
-        this.maxExp = 100;
-        this.satiety = 50;
-        this.happiness = 50;
+        // 属性系统
+        this.level = 1;          // 等级
+        this.exp = 0;            // 经验值
+        this.maxExp = 100;       // 升级所需经验
+        this.satiety = 70;       // 饱食度
+        this.happiness = 70;     // 幸福度
         
-        // 状态显示相关
-        this.showStatus = false;
-        this.statusShowStartTime = 0;  // 记录状态栏开始显示的时间
+        // UI显示控制
+        this.showStatus = false;           // 是否显示状态
+        this.statusShowStartTime = 0;      // 状态显示开始时间
         
         // 加载基础图片
         this.images = {};
@@ -97,7 +104,7 @@ export class Cat {
         loadImage('smile', `images/${prefix}_smile.png`);
         loadImage('sleep', `images/${prefix}_sleep.png`);
         
-        // 调整图片大小
+        // 调整显示尺寸
         this.width = 120;
         this.height = 120;
     }
@@ -140,12 +147,10 @@ export class Cat {
         const effects = {
             '活泼': {
                 expGain: 1.2,      // 经验获得增加20%
-                energyDrain: 1.2,  // 能量消耗增加20%
                 happiness: 1.1     // 幸福度增加10%
             },
             '懒散': {
                 expGain: 0.8,      // 经验获得减少20%
-                energyDrain: 0.8,  // 能量消耗减少20%
                 satietyDrain: 0.9  // 饱食度消耗减少10%
             },
             '优雅': {
@@ -154,7 +159,6 @@ export class Cat {
             },
             '顽皮': {
                 expGain: 1.3,      // 经验获得增加30%
-                energyDrain: 1.3,  // 能量消耗增加30%
                 satietyDrain: 1.2  // 饱食度消耗增加20%
             },
             '高冷': {
@@ -165,11 +169,9 @@ export class Cat {
             '胆小': {
                 expGain: 0.8,      // 经验获得减少20%
                 happiness: 1.1,    // 幸福度增加10%
-                energyDrain: 0.9   // 能量消耗减少10%
             },
             '好奇': {
                 expGain: 1.3,      // 经验获得增加30%
-                energyDrain: 1.1,  // 能量消耗增加10%
                 happiness: 1.2     // 幸福度增加20%
             },
             '傲娇': {
@@ -180,7 +182,6 @@ export class Cat {
         };
         return effects[this.personality] || {
             expGain: 1,
-            energyDrain: 1,
             happiness: 1,
             satietyDrain: 1
         };
@@ -280,7 +281,6 @@ export class Cat {
             maxExp: this.maxExp,
             satiety: this.satiety,
             happiness: this.happiness,
-            energy: this.energy,
             mood: this.mood,
             
             // 技能信息
@@ -294,9 +294,6 @@ export class Cat {
     
     // 更新状态时考虑性格影响
     update() {
-        // 更新能量
-        this.energy = Math.max(0, this.energy - 0.01 * this.personalityEffects.energyDrain);
-        
         // 更新饱食度
         this.satiety = Math.max(0, this.satiety - 0.01 * (this.personalityEffects.satietyDrain || 1));
         
@@ -349,9 +346,7 @@ export class Cat {
     
     // 更新心情
     updateMood() {
-        if (this.energy < 20) {
-            this.mood = 'tired';
-        } else if (this.satiety < 30) {
+        if (this.satiety < 30) {
             this.mood = 'sad';
         } else if (this.happiness > 80) {
             this.mood = 'happy';
@@ -810,8 +805,7 @@ export class Cat {
                 this.happiness = Math.min(this.getMaxHappiness(), this.happiness + 20);
                 break;
             case 'strength':
-                // 立即恢复一定能量
-                this.energy = Math.min(100, this.energy + 20);
+                // 增加攻击力
                 break;
             case 'fortune':
                 // 立即获得一些金币
